@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {}
+    "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {}
   },
   "projects": {
-    "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {
+    "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj",
+        "projectUniqueName": "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj",
         "projectName": "LinkShield.Core",
-        "projectPath": "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj",
+        "projectPath": "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj",
         "packagesPath": "C:\\Users\\BALATHARUN\\.nuget\\packages\\",
-        "outputPath": "y:\\Cyber\\LinkShield.Core\\obj\\",
+        "outputPath": "Y:\\Cyber\\LinkShield.Core\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\BALATHARUN\\AppData\\Roaming\\NuGet\\NuGet.Config"
