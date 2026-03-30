@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LinkShield.Core/LinkShield.Core.csproj" />
+  <Project Path="LinkShield.Service/LinkShield.Service.csproj" />
+</Solution>
