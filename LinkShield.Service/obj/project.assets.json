@@ -2524,11 +2524,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "y:\\Cyber\\LinkShield.Service\\LinkShield.Service.csproj",
+      "projectUniqueName": "Y:\\Cyber\\LinkShield.Service\\LinkShield.Service.csproj",
       "projectName": "LinkShield.Service",
-      "projectPath": "y:\\Cyber\\LinkShield.Service\\LinkShield.Service.csproj",
+      "projectPath": "Y:\\Cyber\\LinkShield.Service\\LinkShield.Service.csproj",
       "packagesPath": "C:\\Users\\BALATHARUN\\.nuget\\packages\\",
-      "outputPath": "y:\\Cyber\\LinkShield.Service\\obj\\",
+      "outputPath": "Y:\\Cyber\\LinkShield.Service\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\BALATHARUN\\AppData\\Roaming\\NuGet\\NuGet.Config"
@@ -2543,8 +2543,8 @@
         "net8.0-windows7.0": {
           "targetAlias": "net8.0-windows",
           "projectReferences": {
-            "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {
-              "projectPath": "y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj"
+            "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj": {
+              "projectPath": "Y:\\Cyber\\LinkShield.Core\\LinkShield.Core.csproj"
             }
           }
         }
