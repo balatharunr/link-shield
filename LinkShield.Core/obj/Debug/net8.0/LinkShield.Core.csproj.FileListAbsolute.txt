@@ -12,3 +12,4 @@ y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.pdb
 y:\Cyber\LinkShield.Core\obj\Debug\net8.0\ref\LinkShield.Core.dll
 Y:\Cyber\LinkShield.Core\bin\Debug\net8.0\LinkShield.Core.runtimeconfig.json
 Y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.genruntimeconfig.cache
+Y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.sourcelink.json

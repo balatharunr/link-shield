@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("LinkShield.Service")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+86237c2c7aec6083da057d98fc9b8945298ecc8d")]
 [assembly: System.Reflection.AssemblyProductAttribute("LinkShield.Service")]
 [assembly: System.Reflection.AssemblyTitleAttribute("LinkShield.Service")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

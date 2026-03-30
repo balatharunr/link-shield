@@ -81,3 +81,4 @@ Y:\Cyber\LinkShield.Service\obj\Debug\net8.0-windows\refint\LinkShield.Service.d
 Y:\Cyber\LinkShield.Service\obj\Debug\net8.0-windows\LinkShield.Service.pdb
 Y:\Cyber\LinkShield.Service\obj\Debug\net8.0-windows\LinkShield.Service.genruntimeconfig.cache
 Y:\Cyber\LinkShield.Service\obj\Debug\net8.0-windows\ref\LinkShield.Service.dll
+Y:\Cyber\LinkShield.Service\obj\Debug\net8.0-windows\LinkShield.Service.sourcelink.json
