@@ -1,0 +1,14 @@
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.GeneratedMSBuildEditorConfig.editorconfig
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.AssemblyInfoInputs.cache
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.AssemblyInfo.cs
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.csproj.CoreCompileInputs.cache
+y:\Cyber\LinkShield.Core\bin\Debug\net8.0\LinkShield.Core.deps.json
+y:\Cyber\LinkShield.Core\bin\Debug\net8.0\LinkShield.Core.dll
+y:\Cyber\LinkShield.Core\bin\Debug\net8.0\LinkShield.Core.pdb
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.csproj.AssemblyReference.cache
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.dll
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\refint\LinkShield.Core.dll
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.pdb
+y:\Cyber\LinkShield.Core\obj\Debug\net8.0\ref\LinkShield.Core.dll
+Y:\Cyber\LinkShield.Core\bin\Debug\net8.0\LinkShield.Core.runtimeconfig.json
+Y:\Cyber\LinkShield.Core\obj\Debug\net8.0\LinkShield.Core.genruntimeconfig.cache
