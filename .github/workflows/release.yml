@@ -4,6 +4,12 @@ on:
   release:
     types: [created]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: write
+
 jobs:
   build-and-upload:
     runs-on: windows-latest
@@ -24,38 +30,16 @@ jobs:
       run: |
         dotnet publish LinkShield.App -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o ./publish
         
-    - name: Get release info
-      id: get_release
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const release = context.payload.release;
-          return {
-            upload_url: release.upload_url,
-            tag_name: release.tag_name
-          };
-        result-encoding: json
-        
-    - name: Upload EXE Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ fromJson(steps.get_release.outputs.result).upload_url }}
-        asset_path: ./publish/LinkShield.exe
-        asset_name: LinkShield.exe
-        asset_content_type: application/octet-stream
-        
     - name: Create ZIP archive
       run: |
-        Compress-Archive -Path ./publish/* -DestinationPath ./LinkShield-${{ fromJson(steps.get_release.outputs.result).tag_name }}-win-x64.zip
-        
-    - name: Upload ZIP Release Asset
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        Compress-Archive -Path ./publish/* -DestinationPath ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip
+
+    - name: Upload EXE to Release
+      uses: softprops/action-gh-release@v2
       with:
-        upload_url: ${{ fromJson(steps.get_release.outputs.result).upload_url }}
-        asset_path: ./LinkShield-${{ fromJson(steps.get_release.outputs.result).tag_name }}-win-x64.zip
-        asset_name: LinkShield-${{ fromJson(steps.get_release.outputs.result).tag_name }}-win-x64.zip
-        asset_content_type: application/zip
+        files: ./publish/LinkShield.exe
+        
+    - name: Upload ZIP to Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip

@@ -23,7 +23,7 @@
 
 ### Option 1: Direct EXE Download (Recommended)
 
-**[📥 Download LinkShield.exe](https://github.com/YOUR_USERNAME/LinkShield/releases/latest/download/LinkShield.exe)**
+**[📥 Download LinkShield.exe](https://github.com/balatharunr/link-shield/releases)**
 
 - Single portable file (~72MB)
 - No installation required - just download and run
@@ -31,7 +31,7 @@
 
 ### Option 2: ZIP Archive
 
-Download the ZIP from [GitHub Releases](https://github.com/YOUR_USERNAME/LinkShield/releases) if you prefer an archive format.
+Download the ZIP from [GitHub Releases](https://github.com/balatharunr/link-shield/releases) if you prefer an archive format.
 
 ---
 
@@ -451,5 +451,5 @@ LinkShield is provided for educational and personal protection purposes. Use res
 
 <p align="center">
   <strong>Made with ❤️ for a safer internet</strong><br>
-  <em>Powered by Machine Learning</em>
+  <em>LinkShield</em>
 </p>
