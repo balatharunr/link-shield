@@ -71,18 +71,22 @@ static class Program
                 
                 // ML-based zero-day detection
                 services.AddSingleton<LexicalMlScorer>();
+                
+                // Enhanced URL security checker (DNS, brand impersonation, gibberish detection)
+                services.AddSingleton<UrlSecurityChecker>();
 
                 // Read bootstrap blocklist from config
                 var bootstrapDomains = context.Configuration.GetSection("BootstrapBlocklist").Get<string[]>()
                                        ?? Array.Empty<string>();
                 
-                // URL Analyzer with ML fallback
+                // URL Analyzer with all detection layers
                 services.AddSingleton<IUrlAnalyzer>(sp =>
                     new SqliteUrlAnalyzer(
                         sp.GetRequiredService<ThreatDatabaseService>(),
                         bootstrapDomains,
                         sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>(),
-                        sp.GetRequiredService<LexicalMlScorer>())); // ML scorer for zero-day detection
+                        sp.GetRequiredService<LexicalMlScorer>(),
+                        sp.GetRequiredService<UrlSecurityChecker>()));
 
                 // HTTP client for threat feed downloads (OpenPhish, PhishTank, etc.)
                 services.AddHttpClient("ThreatFeeds");
@@ -100,6 +104,7 @@ static class Program
         var logger = loggerFactory.CreateLogger("Interceptor");
 
         LexicalMlScorer? mlScorer = null;
+        UrlSecurityChecker? securityChecker = null;
         try
         {
             var threatDb = new ThreatDatabaseService(
@@ -123,12 +128,23 @@ static class Program
             {
                 logger.LogWarning(ex, "ML scorer unavailable. Continuing without ML detection.");
             }
+            
+            // Initialize URL security checker for DNS/brand impersonation detection
+            try
+            {
+                securityChecker = new UrlSecurityChecker(loggerFactory.CreateLogger<UrlSecurityChecker>());
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "URL security checker unavailable. Continuing without enhanced detection.");
+            }
 
             IUrlAnalyzer analyzer = new SqliteUrlAnalyzer(
                 threatDb,
                 bootstrapDomains,
                 loggerFactory.CreateLogger<SqliteUrlAnalyzer>(),
-                mlScorer); // Include ML scorer for zero-day detection
+                mlScorer,
+                securityChecker);
 
             var isMalicious = analyzer.IsMaliciousAsync(url).GetAwaiter().GetResult();
             
