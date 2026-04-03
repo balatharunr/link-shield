@@ -73,7 +73,7 @@ public partial class MainForm : Form
         _headerPanel = new Panel
         {
             Dock = DockStyle.Top,
-            Height = 70,
+            Height = 80,
             BackColor = Color.FromArgb(28, 28, 28),
             Padding = new Padding(20, 10, 20, 10)
         };
@@ -84,7 +84,7 @@ public partial class MainForm : Form
             Font = new Font("Segoe UI", 18, FontStyle.Bold),
             ForeColor = Color.FromArgb(0, 200, 83),
             AutoSize = true,
-            Location = new Point(20, 12)
+            Location = new Point(20, 15)
         };
 
         _protectionStatusLabel = new Label
@@ -93,7 +93,7 @@ public partial class MainForm : Form
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(0, 200, 83),
             AutoSize = true,
-            Location = new Point(20, 44)  // Below the title
+            Location = new Point(20, 55)  // Below the title
         };
 
         _settingsBtn = new Button
