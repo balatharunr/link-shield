@@ -6,14 +6,32 @@ using Microsoft.Extensions.Logging;
 namespace LinkShield.Core;
 
 /// <summary>
-/// Production URL analyzer with waterfall threat detection:
-///   1. In-memory bootstrap blocklist (loaded from appsettings.json — zero DB latency)
-///   2. Local SQLite threat database (indexed lookup, sub-20ms)
-///   3. Enhanced URL Security Checks (DNS, brand impersonation, gibberish detection)
-///   4. ML-based zero-day detection (ONNX model for unknown URLs)
+/// Result of URL analysis with detailed information about each check.
+/// </summary>
+public class UrlAnalysisResult
+{
+    public bool IsMalicious { get; set; }
+    public bool IsDead { get; set; }
+    public bool IsTrusted { get; set; }
+    public string ThreatType { get; set; } = "None";
+    public string ThreatDetails { get; set; } = "";
+    public float? MlScore { get; set; }
+    public string CheckStage { get; set; } = ""; // Which stage determined the result
+}
+
+/// <summary>
+/// Production URL analyzer with the correct waterfall detection order:
+/// 
+///   1. DNS Resolution Check (FIRST!) - If domain doesn't exist, mark as dead link
+///   2. Trusted Domains Check - If domain is known safe (google.com, amzn.in, forms.gle), ALLOW
+///   3. Blocklist Check - Check against known malicious domains in DB
+///   4. Brand Impersonation Check - Detect fake brand domains
+///   5. ML Model (LAST) - Only for unknown domains that passed all checks
 ///
-/// The multi-layer approach catches phishing URLs that aren't yet in any database,
-/// providing protection against zero-day threats.
+/// This order ensures:
+///   - Dead links are caught immediately (no point checking security for non-existent domains)
+///   - Legitimate services with random-looking URLs (forms.gle/xyz) are not blocked
+///   - ML is only used as final fallback for truly unknown URLs
 /// </summary>
 public class SqliteUrlAnalyzer : IUrlAnalyzer
 {
@@ -22,26 +40,26 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
     private readonly HashSet<string> _bootstrapBlocklist;
     private readonly LexicalMlScorer? _mlScorer;
     private readonly UrlSecurityChecker? _securityChecker;
+    private readonly NetworkStateChecker _networkChecker;
     
     // ML threshold for blocking - URLs with score >= this are considered phishing
     private const float MlBlockThreshold = 0.85f;
 
-    /// <param name="threatDb">The SQLite threat database service.</param>
-    /// <param name="bootstrapDomains">Domains from appsettings.json "BootstrapBlocklist" array.</param>
-    /// <param name="logger">Logger instance.</param>
-    /// <param name="mlScorer">Optional ML scorer for zero-day detection.</param>
-    /// <param name="securityChecker">Optional URL security checker for enhanced detection.</param>
     public SqliteUrlAnalyzer(
         ThreatDatabaseService threatDb,
         IEnumerable<string> bootstrapDomains,
         ILogger<SqliteUrlAnalyzer> logger,
         LexicalMlScorer? mlScorer = null,
-        UrlSecurityChecker? securityChecker = null)
+        UrlSecurityChecker? securityChecker = null,
+        NetworkStateChecker? networkChecker = null)
     {
         _threatDb = threatDb;
         _logger = logger;
         _mlScorer = mlScorer;
         _securityChecker = securityChecker;
+        _networkChecker = networkChecker ?? new NetworkStateChecker(
+            LoggerFactory.Create(b => b.SetMinimumLevel(LogLevel.Warning))
+                .CreateLogger<NetworkStateChecker>());
 
         // Build a fast HashSet from config
         _bootstrapBlocklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -51,56 +69,110 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
                 _bootstrapBlocklist.Add(domain.Trim());
         }
 
-        _logger.LogInformation("Bootstrap blocklist loaded: {Count} domains", _bootstrapBlocklist.Count);
-        _logger.LogInformation("ML zero-day detection: {Status}", 
-            _mlScorer != null ? "ENABLED" : "DISABLED");
-        _logger.LogInformation("Enhanced URL security: {Status}",
-            _securityChecker != null ? "ENABLED" : "DISABLED");
+        _logger.LogInformation("URL Analyzer initialized:");
+        _logger.LogInformation("  - Bootstrap blocklist: {Count} domains", _bootstrapBlocklist.Count);
+        _logger.LogInformation("  - Trusted domains: {Count} domains", TrustedDomainsService.GetAllTrustedDomains().Count);
+        _logger.LogInformation("  - ML detection: {Status}", _mlScorer != null ? "ENABLED" : "DISABLED");
+        _logger.LogInformation("  - Security checks: {Status}", _securityChecker != null ? "ENABLED" : "DISABLED");
     }
 
     /// <summary>
-    /// Waterfall threat check:
-    ///   1. Bootstrap blocklist (in-memory HashSet — O(1), zero I/O)
-    ///   2. SQLite threat DB (indexed B-tree lookup, ~5-15ms)
-    ///   3. Enhanced Security Checks (DNS, brand impersonation, gibberish — ~50ms)
-    ///   4. ML Model (ONNX inference, ~10-20ms) — catches zero-day threats
-    ///
-    /// Fail-open: returns false on any error so the user isn't locked out.
+    /// Analyzes a URL with detailed result information.
+    /// 
+    /// NEW WORKFLOW ORDER:
+    ///   1. DNS Check (domain must exist)
+    ///   2. Trusted Domains (whitelist for Google, Amazon, etc.)
+    ///   3. Blocklist Check (known malicious)
+    ///   4. Security Checks (brand impersonation)
+    ///   5. ML Model (unknown URLs)
     /// </summary>
-    public async Task<bool> IsMaliciousAsync(string url)
+    public async Task<UrlAnalysisResult> AnalyzeUrlDetailedAsync(string url)
     {
+        var result = new UrlAnalysisResult();
+        
         try
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                _logger.LogWarning("Could not parse URL: {Url}. Treating as safe (fail-open).", url);
-                return false;
+                _logger.LogWarning("Could not parse URL: {Url}. Treating as suspicious.", url);
+                result.IsMalicious = true;
+                result.ThreatType = "InvalidUrl";
+                result.ThreatDetails = "URL could not be parsed";
+                result.CheckStage = "Parse";
+                return result;
             }
 
             var domain = uri.Host.ToLowerInvariant();
-            _logger.LogDebug("Checking domain '{Domain}'...", domain);
+            _logger.LogDebug("═══ Analyzing URL: {Url} ═══", url.Length > 60 ? url[..60] + "..." : url);
+            _logger.LogDebug("Domain: {Domain}", domain);
 
             // ═══════════════════════════════════════════════════════════════
-            // Check 1: Bootstrap blocklist (instant, O(1))
+            // CHECK 1: DNS Resolution - Does the domain even exist?
+            // This MUST be first - no point checking security for dead domains
             // ═══════════════════════════════════════════════════════════════
+            var dnsResult = await _networkChecker.CheckDomainAsync(domain);
+            
+            if (!dnsResult.IsAlive)
+            {
+                result.IsDead = true;
+                result.ThreatType = "DeadLink";
+                result.ThreatDetails = dnsResult.ErrorMessage ?? "Domain does not exist (NXDOMAIN)";
+                result.CheckStage = "DNS";
+                _logger.LogWarning("[CHECK 1 - DNS] Domain '{Domain}' does not exist: {Error}", 
+                    domain, dnsResult.ErrorMessage);
+                return result;
+            }
+            
+            _logger.LogDebug("[CHECK 1 - DNS] ✓ Domain '{Domain}' is alive (IP: {Ip})", 
+                domain, dnsResult.ResolvedAddresses?[0]);
+
+            // ═══════════════════════════════════════════════════════════════
+            // CHECK 2: Trusted Domains - Is this a known legitimate service?
+            // Whitelist for Google Forms, Amazon short links, etc.
+            // ═══════════════════════════════════════════════════════════════
+            if (TrustedDomainsService.IsTrustedDomain(domain))
+            {
+                result.IsTrusted = true;
+                result.CheckStage = "Trusted";
+                var brand = TrustedDomainsService.GetTrustedBrandForDomain(domain);
+                _logger.LogDebug("[CHECK 2 - TRUSTED] ✓ Domain '{Domain}' is whitelisted{Brand}. ALLOWED.", 
+                    domain, brand != null ? $" ({brand})" : "");
+                return result;
+            }
+            
+            _logger.LogDebug("[CHECK 2 - TRUSTED] Domain '{Domain}' not in whitelist, continuing checks...", domain);
+
+            // ═══════════════════════════════════════════════════════════════
+            // CHECK 3: Blocklist - Is this a known malicious domain?
+            // ═══════════════════════════════════════════════════════════════
+            
+            // Check bootstrap blocklist (in-memory, instant)
             if (_bootstrapBlocklist.Contains(domain))
             {
-                _logger.LogWarning("[BOOTSTRAP] Domain '{Domain}' matched blocklist. BLOCKED.", domain);
-                return true;
+                result.IsMalicious = true;
+                result.ThreatType = "Blocklist";
+                result.ThreatDetails = "Domain in bootstrap blocklist";
+                result.CheckStage = "Bootstrap";
+                _logger.LogWarning("[CHECK 3 - BLOCKLIST] Domain '{Domain}' in bootstrap blocklist. BLOCKED.", domain);
+                return result;
             }
 
-            // ═══════════════════════════════════════════════════════════════
-            // Check 2: SQLite database (sub-20ms)
-            // ═══════════════════════════════════════════════════════════════
+            // Check SQLite database
             var isInDatabase = await _threatDb.DomainExistsAsync(domain);
             if (isInDatabase)
             {
-                _logger.LogWarning("[DATABASE] Domain '{Domain}' found in threat database. BLOCKED.", domain);
-                return true;
+                result.IsMalicious = true;
+                result.ThreatType = "Blocklist";
+                result.ThreatDetails = "Domain found in threat database";
+                result.CheckStage = "Database";
+                _logger.LogWarning("[CHECK 3 - BLOCKLIST] Domain '{Domain}' in threat database. BLOCKED.", domain);
+                return result;
             }
+            
+            _logger.LogDebug("[CHECK 3 - BLOCKLIST] ✓ Domain '{Domain}' not in blocklists", domain);
 
             // ═══════════════════════════════════════════════════════════════
-            // Check 3: Enhanced URL Security (DNS, brand impersonation, etc.)
+            // CHECK 4: Security Analysis (brand impersonation, suspicious patterns)
             // ═══════════════════════════════════════════════════════════════
             if (_securityChecker != null)
             {
@@ -108,45 +180,75 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
                 
                 if (securityResult.IsMalicious)
                 {
-                    _logger.LogWarning(
-                        "[{ThreatType}] URL '{Url}' flagged: {Details}. BLOCKED.",
-                        securityResult.ThreatType,
-                        url.Length > 60 ? url[..60] + "..." : url,
-                        securityResult.ThreatDetails);
-                    return true;
+                    result.IsMalicious = true;
+                    result.ThreatType = securityResult.ThreatType;
+                    result.ThreatDetails = securityResult.ThreatDetails;
+                    result.CheckStage = "Security";
+                    _logger.LogWarning("[CHECK 4 - SECURITY] {ThreatType}: {Details}. BLOCKED.",
+                        securityResult.ThreatType, securityResult.ThreatDetails);
+                    return result;
                 }
+                
+                _logger.LogDebug("[CHECK 4 - SECURITY] ✓ No brand impersonation or suspicious patterns detected");
             }
 
             // ═══════════════════════════════════════════════════════════════
-            // Check 4: ML Zero-Day Detection (fallback for unknown URLs)
+            // CHECK 5: ML Model - Final check for unknown URLs
+            // Only runs if all other checks passed
             // ═══════════════════════════════════════════════════════════════
             if (_mlScorer != null)
             {
                 var mlScore = _mlScorer.GetThreatScore(url);
+                result.MlScore = mlScore;
                 
                 if (mlScore >= MlBlockThreshold)
                 {
-                    _logger.LogWarning(
-                        "[ML ZERO-DAY DETECTED] URL '{Url}' scored {Score:P1} (threshold: {Threshold:P0}). BLOCKED.",
-                        url.Length > 60 ? url[..60] + "..." : url,
-                        mlScore,
-                        MlBlockThreshold);
-                    return true;
+                    result.IsMalicious = true;
+                    result.ThreatType = "MlDetection";
+                    result.ThreatDetails = $"ML model scored {mlScore:P1} (threshold: {MlBlockThreshold:P0})";
+                    result.CheckStage = "ML";
+                    _logger.LogWarning("[CHECK 5 - ML] URL scored {Score:P1} (>= {Threshold:P0}). BLOCKED.",
+                        mlScore, MlBlockThreshold);
+                    return result;
                 }
                 
-                _logger.LogDebug(
-                    "[ML] URL '{Url}' scored {Score:P1} - below threshold, SAFE.",
-                    url.Length > 40 ? url[..40] + "..." : url,
-                    mlScore);
+                _logger.LogDebug("[CHECK 5 - ML] ✓ URL scored {Score:P1} (< {Threshold:P0}) - SAFE",
+                    mlScore, MlBlockThreshold);
             }
 
             // All checks passed - URL is considered safe
-            return false;
+            result.CheckStage = "Complete";
+            _logger.LogDebug("═══ URL ANALYSIS COMPLETE: SAFE ═══");
+            return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error analyzing URL '{Url}'. Failing open (treating as safe).", url);
-            return false; // Fail-open: don't block users on errors
+            _logger.LogError(ex, "Error analyzing URL '{Url}'. Failing closed (blocking).", url);
+            result.IsMalicious = true;
+            result.ThreatType = "Error";
+            result.ThreatDetails = $"Analysis error: {ex.Message}";
+            result.CheckStage = "Error";
+            return result;
         }
+    }
+
+    /// <summary>
+    /// Simple malicious check for backward compatibility.
+    /// Returns true if URL is malicious (should be blocked).
+    /// Returns false if URL is safe OR dead (dead links handled separately).
+    /// </summary>
+    public async Task<bool> IsMaliciousAsync(string url)
+    {
+        var result = await AnalyzeUrlDetailedAsync(url);
+        return result.IsMalicious;
+    }
+    
+    /// <summary>
+    /// Check if URL points to a dead domain.
+    /// </summary>
+    public async Task<bool> IsDeadLinkAsync(string url)
+    {
+        var result = await AnalyzeUrlDetailedAsync(url);
+        return result.IsDead;
     }
 }
