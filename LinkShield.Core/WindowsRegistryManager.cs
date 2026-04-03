@@ -210,6 +210,70 @@ public class WindowsRegistryManager
     }
 
     /// <summary>
+    /// Gets the user's preferred redirect browser path.
+    /// Returns null if auto-detect is selected (use original browser).
+    /// </summary>
+    public string? GetRedirectBrowserPath()
+    {
+        try
+        {
+            using var backupKey = Registry.CurrentUser.OpenSubKey(BackupRegistryPath);
+            var path = backupKey?.GetValue("RedirectBrowserExe") as string;
+
+            if (!string.IsNullOrEmpty(path) && File.Exists(path.Trim('"')))
+                return path.Trim('"');
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to read redirect browser path.");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sets the user's preferred redirect browser path.
+    /// Pass null to use auto-detect (original browser).
+    /// </summary>
+    public void SetRedirectBrowserPath(string? path)
+    {
+        try
+        {
+            using var backupKey = Registry.CurrentUser.CreateSubKey(BackupRegistryPath);
+            if (backupKey == null) return;
+
+            if (string.IsNullOrEmpty(path))
+            {
+                backupKey.DeleteValue("RedirectBrowserExe", throwOnMissingValue: false);
+                _logger.LogInformation("Redirect browser set to auto-detect.");
+            }
+            else
+            {
+                backupKey.SetValue("RedirectBrowserExe", path);
+                _logger.LogInformation("Redirect browser set to: {Path}", path);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to set redirect browser path.");
+        }
+    }
+
+    /// <summary>
+    /// Gets the effective browser path to use for redirecting safe URLs.
+    /// Returns redirect browser if set, otherwise falls back to previous browser.
+    /// </summary>
+    public string? GetEffectiveBrowserPath()
+    {
+        var redirectPath = GetRedirectBrowserPath();
+        if (!string.IsNullOrEmpty(redirectPath))
+            return redirectPath;
+        
+        return GetPreviousBrowserPath();
+    }
+
+    /// <summary>
     /// Detects the exe path of the system's current default HTTP handler by reading
     /// the UserChoice ProgId and resolving it to a shell\open\command.
     /// </summary>
