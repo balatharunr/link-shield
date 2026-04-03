@@ -20,16 +20,17 @@ public class UrlSecurityResult
     public float? MlScore { get; set; }
     public bool DomainExists { get; set; } = true;
     public List<string> DetectedBrands { get; set; } = new();
-    public bool IsGibberish { get; set; }
     public string RiskLevel { get; set; } = "Low"; // Low, Medium, High, Critical
 }
 
 /// <summary>
 /// Enhanced URL security checker with multiple detection layers:
-///   1. DNS Resolution Check - Detects non-existent domains
+///   1. DNS Resolution Check - Detects non-existent domains (BLOCKS if no IP)
 ///   2. Brand Impersonation Detection - Catches fake brand combinations
-///   3. Gibberish Domain Detection - Identifies random string domains
-///   4. Risky TLD Detection - Flags high-risk top-level domains
+///   3. Risky TLD Detection - Flags high-risk top-level domains
+/// 
+/// Note: Gibberish detection removed to avoid false positives on legitimate
+/// short URLs (forms.gle, bit.ly, etc.) that use random-looking strings.
 /// </summary>
 public partial class UrlSecurityChecker
 {
@@ -56,7 +57,7 @@ public partial class UrlSecurityChecker
         "outlook", "hotmail", "yahoo", "gmail", "icloud", "onedrive", "office365", "office",
         
         // Shipping
-        "fedex", "ups", "usps", "dhl", "amazon",
+        "fedex", "ups", "usps", "dhl",
         
         // Gaming
         "steam", "epicgames", "playstation", "xbox", "nintendo", "roblox", "twitch"
@@ -80,21 +81,39 @@ public partial class UrlSecurityChecker
         ".buzz", ".surf", ".rest", ".fit", ".life", ".live", ".world"
     };
     
-    // Legitimate domain suffixes (to avoid false positives)
-    private static readonly HashSet<string> LegitDomainPatterns = new(StringComparer.OrdinalIgnoreCase)
+    // Legitimate domains and URL shorteners (whitelist to avoid false positives)
+    private static readonly HashSet<string> LegitDomains = new(StringComparer.OrdinalIgnoreCase)
     {
+        // Major tech companies
         "google.com", "youtube.com", "facebook.com", "amazon.com", "microsoft.com",
         "apple.com", "github.com", "linkedin.com", "twitter.com", "x.com",
-        "instagram.com", "whatsapp.com", "netflix.com", "paypal.com", "ebay.com"
+        "instagram.com", "whatsapp.com", "netflix.com", "paypal.com", "ebay.com",
+        "zoom.us", "dropbox.com", "slack.com", "discord.com", "twitch.tv",
+        
+        // Google domains
+        "forms.gle", "goo.gl", "g.co", "google.co", "googleapis.com", "googleusercontent.com",
+        "googlevideo.com", "gstatic.com", "ggpht.com", "google.co.in", "google.co.uk",
+        
+        // URL shorteners (legitimate)
+        "bit.ly", "tinyurl.com", "t.co", "ow.ly", "is.gd", "buff.ly", "adf.ly",
+        "lnkd.in", "db.tt", "qr.ae", "cur.lv", "ity.im", "q.gs", "po.st",
+        "bc.vc", "su.pr", "j.mp", "buzurl.com", "cutt.ly", "u.teleportr.me",
+        "rebrand.ly", "bl.ink", "short.io", "t.ly", "v.gd", "rb.gy",
+        
+        // Microsoft domains
+        "microsoft.com", "office.com", "live.com", "outlook.com", "onedrive.com",
+        "sharepoint.com", "azure.com", "msn.com", "bing.com", "linkedin.com",
+        "aka.ms", "1drv.ms", "msft.it",
+        
+        // Other major services
+        "amazonaws.com", "cloudfront.net", "firebase.com", "firebaseapp.com",
+        "cloudflare.com", "akamaihd.net", "cdn.jsdelivr.net", "unpkg.com",
+        "vercel.app", "netlify.app", "herokuapp.com", "pages.dev"
     };
     
     // Regex for detecting IP addresses in URLs
     [GeneratedRegex(@"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}", RegexOptions.Compiled)]
     private static partial Regex IpAddressRegex();
-    
-    // Regex for detecting gibberish (consonant clusters)
-    [GeneratedRegex(@"[bcdfghjklmnpqrstvwxz]{5,}", RegexOptions.IgnoreCase | RegexOptions.Compiled)]
-    private static partial Regex ConsonantClusterRegex();
 
     public UrlSecurityChecker(ILogger<UrlSecurityChecker> logger)
     {
@@ -103,6 +122,10 @@ public partial class UrlSecurityChecker
 
     /// <summary>
     /// Performs comprehensive security analysis on a URL.
+    /// Only blocks if:
+    ///   1. Domain doesn't exist (no DNS/IP) - catches fake domains
+    ///   2. URL uses raw IP address instead of domain
+    ///   3. Brand impersonation detected (fake brand + suspicious patterns)
     /// </summary>
     public async Task<UrlSecurityResult> AnalyzeUrlAsync(string url)
     {
@@ -112,24 +135,27 @@ public partial class UrlSecurityChecker
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
             {
-                result.ThreatType = "InvalidUrl";
-                result.ThreatDetails = "Could not parse URL";
-                result.RiskLevel = "Medium";
+                // Can't parse URL - don't block, let browser handle it
+                result.RiskLevel = "Low";
                 return result;
             }
             
             var domain = uri.Host.ToLowerInvariant();
             var domainWithoutWww = domain.StartsWith("www.") ? domain[4..] : domain;
             
-            // Skip checks for known legitimate domains
+            // ═══════════════════════════════════════════════════════════════
+            // Whitelist Check: Skip all checks for known legitimate domains
+            // ═══════════════════════════════════════════════════════════════
             if (IsKnownLegitDomain(domainWithoutWww))
             {
+                _logger.LogDebug("[WHITELIST] Domain '{Domain}' is whitelisted. SAFE.", domain);
                 result.RiskLevel = "Low";
                 return result;
             }
             
             // ═══════════════════════════════════════════════════════════════
             // Check 1: DNS Resolution - Does the domain exist?
+            // This is the KEY check - if no IP exists, domain is fake
             // ═══════════════════════════════════════════════════════════════
             var dnsResult = await CheckDnsResolutionAsync(domain);
             result.DomainExists = dnsResult.exists;
@@ -138,9 +164,9 @@ public partial class UrlSecurityChecker
             {
                 result.IsMalicious = true;
                 result.ThreatType = "NonExistentDomain";
-                result.ThreatDetails = $"Domain '{domain}' does not exist (DNS lookup failed)";
+                result.ThreatDetails = $"Domain '{domain}' does not exist (no IP address found)";
                 result.RiskLevel = "High";
-                _logger.LogWarning("[DNS] Domain '{Domain}' does not resolve. Likely fake/typosquatting.", domain);
+                _logger.LogWarning("[DNS] Domain '{Domain}' has no IP. BLOCKED.", domain);
                 return result;
             }
             
@@ -151,14 +177,15 @@ public partial class UrlSecurityChecker
             {
                 result.IsMalicious = true;
                 result.ThreatType = "IpAddressUrl";
-                result.ThreatDetails = "URL uses IP address instead of domain name";
+                result.ThreatDetails = "URL uses raw IP address instead of domain name";
                 result.RiskLevel = "High";
-                _logger.LogWarning("[IP] URL uses raw IP address: {Domain}. SUSPICIOUS.", domain);
+                _logger.LogWarning("[IP] URL uses raw IP address: {Domain}. BLOCKED.", domain);
                 return result;
             }
             
             // ═══════════════════════════════════════════════════════════════
             // Check 3: Brand Impersonation Detection
+            // Only blocks if domain contains brand + suspicious patterns
             // ═══════════════════════════════════════════════════════════════
             var brandResult = DetectBrandImpersonation(domainWithoutWww, url);
             result.DetectedBrands = brandResult.brands;
@@ -169,53 +196,19 @@ public partial class UrlSecurityChecker
                 result.ThreatType = "BrandImpersonation";
                 result.ThreatDetails = brandResult.reason;
                 result.RiskLevel = "Critical";
-                _logger.LogWarning("[BRAND] Brand impersonation detected in '{Domain}': {Reason}", 
+                _logger.LogWarning("[BRAND] Brand impersonation in '{Domain}': {Reason}. BLOCKED.", 
                     domain, brandResult.reason);
                 return result;
             }
             
-            // ═══════════════════════════════════════════════════════════════
-            // Check 4: Gibberish Domain Detection
-            // ═══════════════════════════════════════════════════════════════
-            var gibberishResult = DetectGibberishDomain(domainWithoutWww);
-            result.IsGibberish = gibberishResult.isGibberish;
-            
-            if (gibberishResult.isGibberish && HasSuspiciousContext(url))
-            {
-                result.IsMalicious = true;
-                result.ThreatType = "GibberishDomain";
-                result.ThreatDetails = $"Random/gibberish domain with suspicious context: {gibberishResult.reason}";
-                result.RiskLevel = "High";
-                _logger.LogWarning("[GIBBERISH] Suspicious gibberish domain: {Domain}", domain);
-                return result;
-            }
-            
-            // ═══════════════════════════════════════════════════════════════
-            // Check 5: Risky TLD Detection
-            // ═══════════════════════════════════════════════════════════════
-            var tld = GetTld(domain);
-            if (RiskyTlds.Contains(tld))
-            {
-                // Don't block, but flag as elevated risk
-                result.RiskLevel = result.RiskLevel == "Low" ? "Medium" : result.RiskLevel;
-                _logger.LogDebug("[TLD] Domain uses risky TLD: {Tld}", tld);
-                
-                // If combined with other suspicious signals, block
-                if (result.IsGibberish || result.DetectedBrands.Count > 0)
-                {
-                    result.IsMalicious = true;
-                    result.ThreatType = "RiskyTldCombination";
-                    result.ThreatDetails = $"Risky TLD ({tld}) combined with suspicious domain pattern";
-                    result.RiskLevel = "High";
-                }
-            }
-            
+            // Domain exists and no suspicious patterns - SAFE
+            _logger.LogDebug("[SAFE] Domain '{Domain}' passed all checks.", domain);
             return result;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error in URL security analysis for '{Url}'", url);
-            return result; // Fail-open
+            _logger.LogError(ex, "Error in URL security analysis for '{Url}'. Failing open.", url);
+            return result; // Fail-open - don't block on errors
         }
     }
     
@@ -316,50 +309,6 @@ public partial class UrlSecurityChecker
     }
     
     /// <summary>
-    /// Detects gibberish/random string domains.
-    /// </summary>
-    private (bool isGibberish, string reason) DetectGibberishDomain(string domain)
-    {
-        // Get the main domain part (before TLD)
-        var parts = domain.Split('.');
-        if (parts.Length < 2) return (false, "");
-        
-        var mainPart = parts[^2]; // Second-to-last part (e.g., "fijnafkn" from "fijnafkn.com")
-        
-        // Check for consonant clusters (sign of random strings)
-        if (ConsonantClusterRegex().IsMatch(mainPart))
-        {
-            return (true, "Contains unpronounceable consonant cluster");
-        }
-        
-        // Check vowel ratio (real words typically have 30-50% vowels)
-        var vowelCount = mainPart.Count(c => "aeiou".Contains(char.ToLower(c)));
-        var vowelRatio = (float)vowelCount / mainPart.Length;
-        
-        if (mainPart.Length >= 6 && vowelRatio < 0.15f)
-        {
-            return (true, $"Very low vowel ratio ({vowelRatio:P0}) - likely random string");
-        }
-        
-        // Check for excessive length without common patterns
-        if (mainPart.Length > 15 && !mainPart.Contains('-'))
-        {
-            return (true, "Unusually long domain without hyphens");
-        }
-        
-        return (false, "");
-    }
-    
-    /// <summary>
-    /// Checks if URL has suspicious context (path, query params).
-    /// </summary>
-    private bool HasSuspiciousContext(string url)
-    {
-        var lowerUrl = url.ToLowerInvariant();
-        return SuspiciousKeywords.Any(k => lowerUrl.Contains(k));
-    }
-    
-    /// <summary>
     /// Extracts TLD from domain.
     /// </summary>
     private string GetTld(string domain)
@@ -369,12 +318,21 @@ public partial class UrlSecurityChecker
     }
     
     /// <summary>
-    /// Checks if domain is a known legitimate site.
+    /// Checks if domain is a known legitimate site (whitelist).
     /// </summary>
     private bool IsKnownLegitDomain(string domain)
     {
-        return LegitDomainPatterns.Any(legit => 
-            domain.Equals(legit, StringComparison.OrdinalIgnoreCase) ||
-            domain.EndsWith("." + legit, StringComparison.OrdinalIgnoreCase));
+        // Direct match
+        if (LegitDomains.Contains(domain))
+            return true;
+        
+        // Check if it's a subdomain of a whitelisted domain
+        foreach (var legit in LegitDomains)
+        {
+            if (domain.EndsWith("." + legit, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        
+        return false;
     }
 }
