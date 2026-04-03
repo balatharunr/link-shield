@@ -11,7 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/balatharunr/link-shield/releases/latest">
-    <img src="https://img.shields.io/github/v/release/balatharunr/LinkShield?style=for-the-badge&logo=github" alt="Latest Release" />
+    <img src="https://img.shields.io/github/v/release/balatharunr/link-shield?style=for-the-badge&logo=github" alt="Latest Release" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows-blue?style=for-the-badge&logo=windows" alt="Platform" />
   <img src="https://img.shields.io/badge/ML-ONNX%20Runtime-purple?style=for-the-badge" alt="ML ONNX" />
