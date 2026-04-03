@@ -126,23 +126,25 @@ public class LexicalMlScorer : IDisposable
             
             // Get probabilities - RandomForest outputs probabilities for each class
             // Output shape is [1, 2] for [legitimate_prob, phishing_prob]
-            var probabilities = results
-                .FirstOrDefault(r => r.Name.Contains("probabilities") || r.Name.Contains("output"))
-                ?.AsTensor<float>();
-
-            if (probabilities != null && probabilities.Length >= 2)
+            var probabilitiesResult = results.FirstOrDefault(r => r.Name == "probabilities");
+            
+            if (probabilitiesResult != null)
             {
-                // Return phishing probability (index 1)
-                var phishingScore = probabilities[1];
+                var probabilities = probabilitiesResult.AsTensor<float>();
+                // Shape is [1, 2] - need to use 2D indexing: [batch_index, class_index]
+                // Class 0 = legitimate, Class 1 = phishing
+                var phishingScore = probabilities[0, 1]; // Row 0, Column 1 (phishing probability)
+                
                 _logger.LogDebug("ML score for {Url}: {Score:P2}", 
                     url.Length > 50 ? url[..50] + "..." : url, phishingScore);
                 return phishingScore;
             }
 
             // Fallback: try to get label output
-            var label = results.FirstOrDefault(r => r.Name.Contains("label"))?.AsTensor<long>();
-            if (label != null)
+            var labelResult = results.FirstOrDefault(r => r.Name == "label");
+            if (labelResult != null)
             {
+                var label = labelResult.AsTensor<long>();
                 // If we only have labels, return 1.0 for phishing, 0.0 for safe
                 return label[0] == 1 ? 1.0f : 0.0f;
             }
