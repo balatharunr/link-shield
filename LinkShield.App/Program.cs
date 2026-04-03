@@ -68,15 +68,21 @@ static class Program
                 services.AddSingleton<ThreatDatabaseService>();
                 services.AddSingleton<WindowsRegistryManager>();
                 services.AddSingleton<DetectionHistoryService>();
+                
+                // ML-based zero-day detection
+                services.AddSingleton<LexicalMlScorer>();
 
                 // Read bootstrap blocklist from config
                 var bootstrapDomains = context.Configuration.GetSection("BootstrapBlocklist").Get<string[]>()
                                        ?? Array.Empty<string>();
+                
+                // URL Analyzer with ML fallback
                 services.AddSingleton<IUrlAnalyzer>(sp =>
                     new SqliteUrlAnalyzer(
                         sp.GetRequiredService<ThreatDatabaseService>(),
                         bootstrapDomains,
-                        sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>()));
+                        sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>(),
+                        sp.GetRequiredService<LexicalMlScorer>())); // ML scorer for zero-day detection
 
                 // HTTP client for threat feed downloads (OpenPhish, PhishTank, etc.)
                 services.AddHttpClient("ThreatFeeds");
@@ -93,6 +99,7 @@ static class Program
         });
         var logger = loggerFactory.CreateLogger("Interceptor");
 
+        LexicalMlScorer? mlScorer = null;
         try
         {
             var threatDb = new ThreatDatabaseService(
@@ -107,10 +114,21 @@ static class Program
             var bootstrapDomains = config.GetSection("BootstrapBlocklist").Get<string[]>()
                                    ?? Array.Empty<string>();
 
+            // Initialize ML scorer for zero-day detection
+            try
+            {
+                mlScorer = new LexicalMlScorer(loggerFactory.CreateLogger<LexicalMlScorer>());
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "ML scorer unavailable. Continuing without ML detection.");
+            }
+
             IUrlAnalyzer analyzer = new SqliteUrlAnalyzer(
                 threatDb,
                 bootstrapDomains,
-                loggerFactory.CreateLogger<SqliteUrlAnalyzer>());
+                loggerFactory.CreateLogger<SqliteUrlAnalyzer>(),
+                mlScorer); // Include ML scorer for zero-day detection
 
             var isMalicious = analyzer.IsMaliciousAsync(url).GetAwaiter().GetResult();
             
@@ -138,6 +156,10 @@ static class Program
             {
                 try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
             }
+        }
+        finally
+        {
+            mlScorer?.Dispose();
         }
     }
 

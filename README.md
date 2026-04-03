@@ -107,20 +107,29 @@ Link Click (WhatsApp, Email, etc.)
  Browser
 ```
 
-### Threat Detection
-1. **Bootstrap Blocklist**: Instant blocking of known threats (configurable)
-2. **SQLite Database**: Local cache of 10,000s of phishing domains
+### Threat Detection (Waterfall)
+```
+URL Click → Bootstrap Blocklist → SQLite Database → ML Model → Safe/Block
+```
+
+1. **Bootstrap Blocklist**: Instant blocking of known threats (configurable in appsettings.json)
+2. **SQLite Database**: Local cache of 10,000s of phishing domains from threat feeds
 3. **Multi-Source Threat Feeds**:
    - **OpenPhish**: Community-driven phishing URL feed
    - **PhishTank**: Verified phishing database (operated by Cisco)
-4. **Automatic Sync**: Updates threat feeds every 6 hours
+4. **🤖 ML Zero-Day Detection** (NEW): Machine learning model catches unknown phishing URLs
+   - ONNX-based RandomForest classifier
+   - Analyzes URL lexical features (length, entropy, suspicious keywords, etc.)
+   - Blocks URLs scoring ≥85% threat probability
+   - Catches phishing attempts not yet in any database
+5. **Automatic Sync**: Updates threat feeds every 6 hours
 
 ## 📁 Data Storage
 
 LinkShield stores data in:
 ```
 %LOCALAPPDATA%\LinkShield\
-├── threats.db          # Threat database (SQLite)
+├── threats.db              # Threat database (SQLite)
 └── detection_history.json  # Your detection history
 ```
 
