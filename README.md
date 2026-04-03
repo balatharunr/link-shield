@@ -109,8 +109,11 @@ Link Click (WhatsApp, Email, etc.)
 
 ### Threat Detection
 1. **Bootstrap Blocklist**: Instant blocking of known threats (configurable)
-2. **SQLite Database**: Local cache of 1000s of phishing domains from OpenPhish
-3. **Automatic Sync**: Updates threat feeds every 6 hours
+2. **SQLite Database**: Local cache of 10,000s of phishing domains
+3. **Multi-Source Threat Feeds**:
+   - **OpenPhish**: Community-driven phishing URL feed
+   - **PhishTank**: Verified phishing database (operated by Cisco)
+4. **Automatic Sync**: Updates threat feeds every 6 hours
 
 ## 📁 Data Storage
 

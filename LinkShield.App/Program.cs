@@ -78,8 +78,8 @@ static class Program
                         bootstrapDomains,
                         sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>()));
 
-                // HTTP client for threat feed downloads
-                services.AddHttpClient("OpenPhish");
+                // HTTP client for threat feed downloads (OpenPhish, PhishTank, etc.)
+                services.AddHttpClient("ThreatFeeds");
 
                 // Background workers
                 services.AddHostedService<ThreatFeedSyncWorker>();
