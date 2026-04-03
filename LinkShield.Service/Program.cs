@@ -22,7 +22,16 @@ if (args.Length > 0 && Uri.TryCreate(args[0], UriKind.Absolute, out var parsedUr
 }
 
 // ── DAEMON MODE ────────────────────────────────────────────────────
-await RunDaemonAsync(args);
+// Run Windows Forms message loop on STA thread for tray icon
+Thread staThread = new(() =>
+{
+    System.Windows.Forms.Application.EnableVisualStyles();
+    System.Windows.Forms.Application.SetCompatibleTextRenderingDefault(false);
+    RunDaemonWithTrayAsync(args).GetAwaiter().GetResult();
+});
+staThread.SetApartmentState(ApartmentState.STA);
+staThread.Start();
+staThread.Join();
 
 // ===================================================================
 // Interceptor Mode Implementation
@@ -87,7 +96,64 @@ static async Task RunInterceptorAsync(string url)
 }
 
 // ===================================================================
-// Daemon Mode Implementation
+// Daemon Mode Implementation with Tray Icon
+// ===================================================================
+static async Task RunDaemonWithTrayAsync(string[] args)
+{
+    var builder = Host.CreateApplicationBuilder(args);
+
+    // Core services
+    builder.Services.AddSingleton<ThreatDatabaseService>();
+    builder.Services.AddSingleton<WindowsRegistryManager>();
+
+    // Read bootstrap blocklist from config and inject into SqliteUrlAnalyzer
+    var bootstrapDomains = builder.Configuration.GetSection("BootstrapBlocklist").Get<string[]>()
+                           ?? Array.Empty<string>();
+    builder.Services.AddSingleton<IUrlAnalyzer>(sp =>
+        new SqliteUrlAnalyzer(
+            sp.GetRequiredService<ThreatDatabaseService>(),
+            bootstrapDomains,
+            sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>()));
+
+    // HTTP client for threat feed downloads
+    builder.Services.AddHttpClient("OpenPhish");
+
+    // Background workers
+    builder.Services.AddHostedService<ThreatFeedSyncWorker>();
+    builder.Services.AddHostedService<DnsSinkholeWorker>();
+
+    var host = builder.Build();
+
+    // Register browser capability (runs once at launch)
+    var registryManager = host.Services.GetRequiredService<WindowsRegistryManager>();
+    var exePath = Environment.ProcessPath;
+    if (!string.IsNullOrEmpty(exePath))
+    {
+        registryManager.RegisterAsBrowser(exePath);
+    }
+
+    // Create tray icon on UI thread
+    var appLifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+    using var trayIcon = new TrayIconManager(appLifetime);
+    
+    // Show startup notification
+    trayIcon.ShowBalloon("LinkShield Active", "URL protection is now running.", System.Windows.Forms.ToolTipIcon.Info);
+
+    // Run host in background, process Windows messages on main thread
+    var hostTask = host.RunAsync();
+    
+    // Process Windows Forms messages until app stops
+    while (!appLifetime.ApplicationStopping.IsCancellationRequested)
+    {
+        System.Windows.Forms.Application.DoEvents();
+        await Task.Delay(100);
+    }
+    
+    await hostTask;
+}
+
+// ===================================================================
+// Daemon Mode Implementation (legacy, kept for reference)
 // ===================================================================
 static async Task RunDaemonAsync(string[] args)
 {
