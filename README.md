@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/YOUR_USERNAME/LinkShield/releases/latest">
-    <img src="https://img.shields.io/github/v/release/YOUR_USERNAME/LinkShield?style=for-the-badge&logo=github" alt="Latest Release" />
+  <a href="https://github.com/balatharunr/link-shield/releases/latest">
+    <img src="https://img.shields.io/github/v/release/balatharunr/LinkShield?style=for-the-badge&logo=github" alt="Latest Release" />
   </a>
   <img src="https://img.shields.io/badge/platform-Windows-blue?style=for-the-badge&logo=windows" alt="Platform" />
   <img src="https://img.shields.io/badge/ML-ONNX%20Runtime-purple?style=for-the-badge" alt="ML ONNX" />
@@ -43,17 +43,17 @@ Download the ZIP from [GitHub Releases](https://github.com/balatharunr/link-shie
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                        🧠 ML-POWERED THREAT ANALYSIS                        │
+                         🧠 ML-POWERED THREAT ANALYSIS                        
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│    URL Input ──► Feature Extraction ──► ONNX Model ──► Threat Score        │
+│    URL Input ──► Feature Extraction ──► ONNX Model ──► Threat Score         │
 │                         │                   │              │                │
 │                         ▼                   ▼              ▼                │
-│              ┌──────────────────┐   ┌─────────────┐   ┌─────────┐          │
-│              │ 10 Lexical       │   │ RandomForest│   │ 0.0-1.0 │          │
-│              │ Features         │   │ Classifier  │   │ Score   │          │
-│              │ Analyzed         │   │ (100 trees) │   │         │          │
-│              └──────────────────┘   └─────────────┘   └─────────┘          │
+│              ┌──────────────────┐   ┌─────────────┐   ┌─────────┐           │
+│              │ 10 Lexical       │   │ RandomForest│   │ 0.0-1.0 │           │
+│              │ Features         │   │ Classifier  │   │ Score   │           │
+│              │ Analyzed         │   │ (100 trees) │   │         │           │
+│              └──────────────────┘   └─────────────┘   └─────────┘           │
 │                                                                             │
 │    Score ≥ 0.85 = 🚫 BLOCKED  |  Score < 0.85 = ✅ SAFE                    │
 │                                                                             │
@@ -121,7 +121,7 @@ Traditional URL blocklists are **always behind** - they only catch known threats
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                           LINKSHIELD ARCHITECTURE                           │
+│                           LINKSHIELD ARCHITECTURE                          │
 ├────────────────────────────────────────────────────────────────────────────┤
 │                                                                            │
 │   📱 External App (WhatsApp, Email, Slack)                                 │
@@ -129,16 +129,16 @@ Traditional URL blocklists are **always behind** - they only catch known threats
 │              │ Click link                                                  │
 │              ▼                                                             │
 │   ┌─────────────────────┐                                                  │
-│   │   LinkShield.App    │ ◄── Registered as default "browser"             │
+│   │   LinkShield.App    │ ◄── Registered as default "browser"              │
 │   │   (WinForms GUI)    │                                                  │
 │   └──────────┬──────────┘                                                  │
 │              │                                                             │
 │              ▼                                                             │
-│   ┌─────────────────────────────────────────────────────────────┐         │
-│   │                    THREAT DETECTION WATERFALL                │         │
-│   │  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐ │         │
+│   ┌─────────────────────────────────────────────────────────────┐          │
+│   │                    THREAT DETECTION WATERFALL               │         │
+│   │  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐ │          │
 │   │  │ Bootstrap   │  │   SQLite    │  │   🧠 ML ONNX Model   │ │         │
-│   │  │ Blocklist   │─►│  Database   │─►│   (Final Arbiter)    │ │         │
+│   │  │ Blocklist   │─►│  Database   │─►│   (Final Arbiter)    │ │          │
 │   │  │ (Instant)   │  │ (10K+ URLs) │  │   RandomForest       │ │         │
 │   │  └─────────────┘  └─────────────┘  └──────────────────────┘ │         │
 │   │         │                │                    │              │         │
