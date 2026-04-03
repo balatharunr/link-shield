@@ -13,6 +13,8 @@ permissions:
 jobs:
   build-and-upload:
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout code
@@ -34,12 +36,10 @@ jobs:
       run: |
         Compress-Archive -Path ./publish/* -DestinationPath ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip
 
-    - name: Upload EXE to Release
+    - name: Upload release assets
       uses: softprops/action-gh-release@v2
       with:
-        files: ./publish/LinkShield.exe
-        
-    - name: Upload ZIP to Release
-      uses: softprops/action-gh-release@v2
-      with:
-        files: ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip
+        files: |
+          ./publish/LinkShield.exe
+          ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip
+        token: ${{ secrets.RELEASE_TOKEN != '' && secrets.RELEASE_TOKEN || github.token }}
