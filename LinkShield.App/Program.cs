@@ -69,24 +69,28 @@ static class Program
                 services.AddSingleton<WindowsRegistryManager>();
                 services.AddSingleton<DetectionHistoryService>();
                 
+                // Network state checker - DNS resolution (FIRST check in pipeline)
+                services.AddSingleton<NetworkStateChecker>();
+                
                 // ML-based zero-day detection
                 services.AddSingleton<LexicalMlScorer>();
                 
-                // Enhanced URL security checker (DNS, brand impersonation, gibberish detection)
+                // Enhanced URL security checker (brand impersonation detection)
                 services.AddSingleton<UrlSecurityChecker>();
 
                 // Read bootstrap blocklist from config
                 var bootstrapDomains = context.Configuration.GetSection("BootstrapBlocklist").Get<string[]>()
                                        ?? Array.Empty<string>();
                 
-                // URL Analyzer with all detection layers
+                // URL Analyzer with all detection layers (new workflow order)
                 services.AddSingleton<IUrlAnalyzer>(sp =>
                     new SqliteUrlAnalyzer(
                         sp.GetRequiredService<ThreatDatabaseService>(),
                         bootstrapDomains,
                         sp.GetRequiredService<ILogger<SqliteUrlAnalyzer>>(),
                         sp.GetRequiredService<LexicalMlScorer>(),
-                        sp.GetRequiredService<UrlSecurityChecker>()));
+                        sp.GetRequiredService<UrlSecurityChecker>(),
+                        sp.GetRequiredService<NetworkStateChecker>()));
 
                 // HTTP client for threat feed downloads (OpenPhish, PhishTank, etc.)
                 services.AddHttpClient("ThreatFeeds");
@@ -99,14 +103,22 @@ static class Program
     {
         using var loggerFactory = LoggerFactory.Create(b =>
         {
-            b.SetMinimumLevel(LogLevel.Warning); // Quieter for interceptor
+            b.SetMinimumLevel(LogLevel.Debug); // More verbose for debugging
+            b.AddConsole();
         });
         var logger = loggerFactory.CreateLogger("Interceptor");
 
         LexicalMlScorer? mlScorer = null;
         UrlSecurityChecker? securityChecker = null;
+        NetworkStateChecker? networkChecker = null;
+        
         try
         {
+            logger.LogInformation("═══════════════════════════════════════════════════════");
+            logger.LogInformation("LinkShield Interceptor - Analyzing URL");
+            logger.LogInformation("URL: {Url}", url);
+            logger.LogInformation("═══════════════════════════════════════════════════════");
+            
             var threatDb = new ThreatDatabaseService(
                 loggerFactory.CreateLogger<ThreatDatabaseService>());
             threatDb.EnsureDatabaseAsync().GetAwaiter().GetResult();
@@ -119,6 +131,9 @@ static class Program
             var bootstrapDomains = config.GetSection("BootstrapBlocklist").Get<string[]>()
                                    ?? Array.Empty<string>();
 
+            // Initialize network state checker FIRST - DNS is the first check
+            networkChecker = new NetworkStateChecker(loggerFactory.CreateLogger<NetworkStateChecker>());
+            
             // Initialize ML scorer for zero-day detection
             try
             {
@@ -129,7 +144,7 @@ static class Program
                 logger.LogWarning(ex, "ML scorer unavailable. Continuing without ML detection.");
             }
             
-            // Initialize URL security checker for DNS/brand impersonation detection
+            // Initialize URL security checker for brand impersonation detection
             try
             {
                 securityChecker = new UrlSecurityChecker(loggerFactory.CreateLogger<UrlSecurityChecker>());
@@ -139,39 +154,56 @@ static class Program
                 logger.LogWarning(ex, "URL security checker unavailable. Continuing without enhanced detection.");
             }
 
-            IUrlAnalyzer analyzer = new SqliteUrlAnalyzer(
+            // Create analyzer with all components including networkChecker
+            var analyzer = new SqliteUrlAnalyzer(
                 threatDb,
                 bootstrapDomains,
                 loggerFactory.CreateLogger<SqliteUrlAnalyzer>(),
                 mlScorer,
-                securityChecker);
+                securityChecker,
+                networkChecker);
 
-            var isMalicious = analyzer.IsMaliciousAsync(url).GetAwaiter().GetResult();
+            // Use the detailed analysis method
+            var result = analyzer.AnalyzeUrlDetailedAsync(url).GetAwaiter().GetResult();
             
-            // Log detection to history
             var historyService = new DetectionHistoryService();
-            historyService.LogDetection(url, isMalicious);
             
-            if (isMalicious)
+            // Handle dead links (DNS check failed)
+            if (result.IsDead)
             {
-                logger.LogWarning("BLOCKED: {Url}", url);
-                ShowBlockedNotification(url);
+                var domain = Uri.TryCreate(url, UriKind.Absolute, out var uri) ? uri.Host : url;
+                historyService.LogDetection(url, false, $"Dead Link: {result.ThreatDetails}", DetectionStatus.DeadLink);
+                logger.LogWarning("══ DEAD LINK ══ Domain does not exist: {Details}", result.ThreatDetails);
+                ShowDeadLinkNotification(domain);
                 return;
             }
+            
+            // Handle malicious URLs
+            if (result.IsMalicious)
+            {
+                historyService.LogDetection(url, true, $"{result.ThreatType}: {result.ThreatDetails}", DetectionStatus.Blocked);
+                logger.LogWarning("══ BLOCKED ══ {ThreatType}: {Details}", result.ThreatType, result.ThreatDetails);
+                ShowBlockedNotification(url, result.ThreatType);
+                return;
+            }
+            
+            // URL is safe - log and open in browser
+            var mlScoreText = result.MlScore.HasValue ? $"{result.MlScore:P1}" : "N/A";
+            var logMessage = result.IsTrusted 
+                ? "Safe (Trusted Domain)" 
+                : $"Safe (ML Score: {mlScoreText})";
+            historyService.LogDetection(url, false, logMessage, DetectionStatus.Safe);
+            
+            logger.LogInformation("══ SAFE ══ Opening in browser{Trusted}", 
+                result.IsTrusted ? " (Trusted Domain)" : "");
 
             LaunchInRealBrowser(url, logger);
         }
         catch (Exception ex)
         {
-            logger.LogError(ex, "Error processing URL. Failing open.");
-            try
-            {
-                LaunchInRealBrowser(url, logger);
-            }
-            catch
-            {
-                try { Process.Start(new ProcessStartInfo(url) { UseShellExecute = true }); } catch { }
-            }
+            logger.LogError(ex, "Error processing URL. Blocking for safety.");
+            // On error, show notification instead of opening potentially dangerous URL
+            ShowBlockedNotification(url, "Analysis Error - Blocked for Safety");
         }
         finally
         {
@@ -230,7 +262,7 @@ static class Program
         }
     }
 
-    private static void ShowBlockedNotification(string url)
+    private static void ShowBlockedNotification(string url, string reason = "Threat Blocked")
     {
         var safeUrl = url.Replace("'", "''").Replace("\"", "`\"");
         if (safeUrl.Length > 150) safeUrl = safeUrl[..150] + "...";
@@ -240,8 +272,39 @@ Add-Type -AssemblyName System.Runtime.WindowsRuntime
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
 $textNodes = $template.GetElementsByTagName('text')
-$textNodes.Item(0).AppendChild($template.CreateTextNode('🛡️ LinkShield: Threat Blocked')) > $null
+$textNodes.Item(0).AppendChild($template.CreateTextNode('🛡️ LinkShield: {reason}')) > $null
 $textNodes.Item(1).AppendChild($template.CreateTextNode('Blocked: {safeUrl}')) > $null
+$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
+$notifier.Show($toast)
+";
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{psScript}\"",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            };
+            Process.Start(psi);
+        }
+        catch { }
+    }
+    
+    private static void ShowDeadLinkNotification(string domain)
+    {
+        var safeDomain = domain.Replace("'", "''").Replace("\"", "`\"");
+        if (safeDomain.Length > 100) safeDomain = safeDomain[..100] + "...";
+
+        var psScript = @$"
+Add-Type -AssemblyName System.Runtime.WindowsRuntime
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$textNodes = $template.GetElementsByTagName('text')
+$textNodes.Item(0).AppendChild($template.CreateTextNode('⚠️ LinkShield: Dead Link Detected')) > $null
+$textNodes.Item(1).AppendChild($template.CreateTextNode('Server for {safeDomain} does not exist')) > $null
 $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
 $notifier.Show($toast)

@@ -20,7 +20,7 @@ public class DetectionHistoryService
         LoadHistory();
     }
 
-    public void LogDetection(string url, bool wasBlocked, string? threatType = null)
+    public void LogDetection(string url, bool wasBlocked, string? threatType = null, DetectionStatus? status = null)
     {
         lock (_lock)
         {
@@ -31,7 +31,8 @@ public class DetectionHistoryService
                 Domain = TryGetDomain(url),
                 WasBlocked = wasBlocked,
                 ThreatType = threatType ?? (wasBlocked ? "Malicious URL" : "Safe"),
-                DetectedAt = DateTime.UtcNow
+                DetectedAt = DateTime.UtcNow,
+                Status = status ?? (wasBlocked ? DetectionStatus.Blocked : DetectionStatus.Safe)
             };
             
             _history.Insert(0, record);
@@ -150,6 +151,25 @@ public class DetectionRecord
     public bool WasBlocked { get; set; }
     public string ThreatType { get; set; } = "";
     public DateTime DetectedAt { get; set; }
+    
+    /// <summary>
+    /// Status of the detection: Safe, Blocked, DeadLink (warning).
+    /// DeadLink = domain does not resolve to an IP (NXDOMAIN).
+    /// </summary>
+    public DetectionStatus Status { get; set; } = DetectionStatus.Safe;
+}
+
+/// <summary>
+/// Detection status types for URL scanning.
+/// </summary>
+public enum DetectionStatus
+{
+    /// <summary>URL is safe and domain is alive.</summary>
+    Safe,
+    /// <summary>URL is blocked due to threat detection.</summary>
+    Blocked,
+    /// <summary>URL is safe but domain doesn't exist (NXDOMAIN - dead link).</summary>
+    DeadLink
 }
 
 public class AnalyticsSummary

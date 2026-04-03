@@ -21,7 +21,7 @@ Usage:
     python train_model.py
     
 Output:
-    linkshield_model.onnx - The trained model for C# integration
+linkshield_model.onnx - The trained model for C# integration
 """
 
 import math

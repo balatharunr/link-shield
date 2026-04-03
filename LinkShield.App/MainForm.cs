@@ -287,11 +287,19 @@ public partial class MainForm : Form
         
         foreach (var record in _historyService.GetRecentDetections(100))
         {
-            var item = new ListViewItem(record.WasBlocked ? "🚫 Blocked" : "✅ Safe");
+            // Determine status text and color based on detection status
+            var (statusText, statusColor) = record.Status switch
+            {
+                DetectionStatus.Blocked => ("🚫 Blocked", Color.FromArgb(255, 100, 100)),    // Red
+                DetectionStatus.DeadLink => ("⚠️ Dead Link", Color.FromArgb(255, 200, 50)),  // Yellow/Orange
+                _ => ("✅ Safe", Color.FromArgb(100, 255, 100))                               // Green
+            };
+            
+            var item = new ListViewItem(statusText);
             item.SubItems.Add(TruncateUrl(record.Url, 60));
             item.SubItems.Add(record.DetectedAt.ToLocalTime().ToString("MMM dd, HH:mm:ss"));
             item.Tag = record;
-            item.ForeColor = record.WasBlocked ? Color.FromArgb(255, 100, 100) : Color.FromArgb(100, 255, 100);
+            item.ForeColor = statusColor;
             _historyList.Items.Add(item);
         }
         
