@@ -1,0 +1,23 @@
+# Build outputs
+**/bin/
+**/obj/
+
+# Publish outputs
+publish/
+**/publish/
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vcxproj.user
+*.rsuser
+
+# IDEs
+.idea/
+
+# OS files
+Thumbs.db
+.DS_Store
