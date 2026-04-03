@@ -42,4 +42,4 @@ jobs:
         files: |
           ./publish/LinkShield.exe
           ./LinkShield-${{ github.event.release.tag_name }}-win-x64.zip
-        token: ${{ secrets.RELEASE_TOKEN != '' && secrets.RELEASE_TOKEN || github.token }}
+        token: ${{ github.token }}
