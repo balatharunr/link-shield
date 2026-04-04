@@ -401,7 +401,7 @@ Edit `appsettings.json` (next to the exe):
 ---
 
 ## 📊 Performance
-┌────────────────────────────┐
+
 | Metric       | Value       |
 |--------------|-------------|
 | URL Analysis | < 20ms      |
@@ -409,7 +409,7 @@ Edit `appsettings.json` (next to the exe):
 | EXE Size     | ~72MB       |
 | Startup Time | < 2 seconds |
 | ML Inference | < 5ms       |
-└────────────────────────────┘
+
 ---
 
 ## 🚨 Troubleshooting
