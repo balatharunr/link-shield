@@ -1,4 +1,4 @@
-1// Quick test to verify ML integration
+// Quick test to verify ML integration
 // Run with: dotnet run
 
 using LinkShield.Core;
