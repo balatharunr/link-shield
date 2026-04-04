@@ -51,6 +51,13 @@ static class Program
         // Start background services
         _host.StartAsync().GetAwaiter().GetResult();
 
+        // Show welcome wizard on first run
+        if (WelcomeForm.ShouldShowWelcome())
+        {
+            using var welcomeForm = new WelcomeForm(_host.Services);
+            welcomeForm.ShowDialog();
+        }
+
         // Run the main form
         _mainForm = new MainForm(_host.Services);
         Application.Run(_mainForm);

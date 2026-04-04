@@ -94,7 +94,7 @@ public partial class MainForm : Form
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(0, 200, 83),
             AutoSize = true,
-            Location = new Point(20, 45)  // Below the title to avoid overlap
+            Location = new Point(20, 48)  // Positioned below the title with more spacing
         };
 
         _settingsBtn = new Button
@@ -314,18 +314,15 @@ public partial class MainForm : Form
 
     private void HistoryList_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
     {
-        // Fill entire header row with dark grey to eliminate white column issue
-        using var brush = new SolidBrush(Color.FromArgb(40, 40, 40));
+        // Fill entire header background first (covers any gaps)
+        using var bgBrush = new SolidBrush(Color.FromArgb(40, 40, 40));
         
-        // For the last column, extend the fill to cover any remaining space
-        var fillBounds = e.Bounds;
-        if (e.ColumnIndex == _historyList.Columns.Count - 1)
-        {
-            fillBounds = new Rectangle(e.Bounds.X, e.Bounds.Y, 
-                _historyList.ClientSize.Width - e.Bounds.X, e.Bounds.Height);
-        }
+        // Fill from column start to far right edge of control to eliminate white gaps
+        var fullWidth = Math.Max(_historyList.Width, _historyList.ClientSize.Width + SystemInformation.VerticalScrollBarWidth);
+        var fillBounds = new Rectangle(0, e.Bounds.Y, fullWidth, e.Bounds.Height);
+        e.Graphics.FillRectangle(bgBrush, fillBounds);
         
-        e.Graphics.FillRectangle(brush, fillBounds);
+        // Draw the column header text
         e.Graphics.DrawString(e.Header?.Text, _historyList.Font, Brushes.White, e.Bounds.X + 5, e.Bounds.Y + 5);
     }
 

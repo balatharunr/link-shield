@@ -265,11 +265,13 @@ public partial class SettingsForm : Form
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(50, 50, 50),
             ForeColor = Color.White,
-            Cursor = Cursors.Hand,
-            DialogResult = DialogResult.OK
+            Cursor = Cursors.Hand
         };
         closeBtn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
-        closeBtn.Click += (s, e) => Close();  // Explicitly close the form
+        closeBtn.Click += (s, e) => {
+            DialogResult = DialogResult.OK;
+            Close();
+        };
 
         Controls.AddRange(new Control[] { titleLabel, browserGroup, generalGroup, infoLabel, closeBtn });
     }
