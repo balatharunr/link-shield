@@ -124,7 +124,7 @@ Traditional URL blocklists are **always behind** - they only catch known threats
 │                           LINKSHIELD ARCHITECTURE                          │
 ├────────────────────────────────────────────────────────────────────────────┤
 │                                                                            │
-│   📱 External App (WhatsApp, Email, Slack)                                 │
+│      External App (WhatsApp, Email, Slack)                                 │
 │              │                                                             │
 │              │ Click link                                                  │
 │              ▼                                                             │
@@ -135,22 +135,22 @@ Traditional URL blocklists are **always behind** - they only catch known threats
 │              │                                                             │
 │              ▼                                                             │
 │   ┌─────────────────────────────────────────────────────────────┐          │
-│   │                    THREAT DETECTION WATERFALL               │         │
+│   │                    THREAT DETECTION WATERFALL               │          │
 │   │  ┌─────────────┐  ┌─────────────┐  ┌──────────────────────┐ │          │
-│   │  │ Bootstrap   │  │   SQLite    │  │   🧠 ML ONNX Model   │ │         │
+│   │  │ Bootstrap   │  │   SQLite    │  │    ML ONNX Model     │ │          │
 │   │  │ Blocklist   │─►│  Database   │─►│   (Final Arbiter)    │ │          │
-│   │  │ (Instant)   │  │ (10K+ URLs) │  │   RandomForest       │ │         │
-│   │  └─────────────┘  └─────────────┘  └──────────────────────┘ │         │
-│   │         │                │                    │              │         │
-│   │    ❌ Block         ❌ Block            Score ≥ 0.85?       │         │
-│   │                                         │         │          │         │
-│   │                                   ❌ Block    ✅ Safe        │         │
-│   └─────────────────────────────────────────────────────────────┘         │
+│   │  │ (Instant)   │  │ (10K+ URLs) │  │   RandomForest       │ │          │
+│   │  └─────────────┘  └─────────────┘  └──────────────────────┘ │          │
+│   │         │                │                    │             │          │
+│   │    ❌ Block         ❌ Block            Score ≥ 0.85?      │          │
+│   │                                         │         │         │          │
+│   │                                   ❌ Block    ✅ Safe      │          │
+│   └─────────────────────────────────────────────────────────────┘          │
 │              │                                                             │
 │        ┌─────┴─────┐                                                       │
 │        │           │                                                       │
 │        ▼           ▼                                                       │
-│   ✅ Safe      🚫 Malicious                                                │
+│   ✅ Safe      🚫 Malicious                                               │
 │   Open in      Block URL +                                                 │
 │   Browser      Toast Alert                                                 │
 │                                                                            │
@@ -225,17 +225,17 @@ Now when you click links in any app:
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│  🛡️ LinkShield  ● Protection Active              ⚙  │
+│  🛡️ LinkShield  ● Protection Active              ⚙    │
 ├────────────────────────────────────────────────────────┤
-│  ┌─────────┐  ┌─────────────┐  ┌─────────────┐        │
-│  │ Today   │  │ This Week   │  │ All Time    │        │
-│  │ 24 / 2  │  │ 156 / 12    │  │ 847 / 45    │        │
-│  │ scanned │  │ scanned     │  │ scanned     │        │
-│  │ blocked │  │ blocked     │  │ blocked     │        │
-│  └─────────┘  └─────────────┘  └─────────────┘        │
+│  ┌─────────┐  ┌─────────────┐  ┌─────────────┐         │
+│  │ Today   │  │ This Week   │  │ All Time    │         │
+│  │ 24 / 2  │  │ 156 / 12    │  │ 847 / 45    │         │
+│  │ scanned │  │ scanned     │  │ scanned     │         │
+│  │ blocked │  │ blocked     │  │ blocked     │         │
+│  └─────────┘  └─────────────┘  └─────────────┘         │
 ├────────────────────────────────────────────────────────┤
 │  Recent Activity                        [Clear History]│
-│  ──────────────────────────────────────────────────── │
+│  ────────────────────────────────────────────────────  │
 │  🚫 Blocked   phishing-site.net/...     Apr 3, 10:15  │
 │  ✅ Safe      google.com/search?q=...   Apr 3, 10:14  │
 │  ✅ Safe      github.com/user/repo      Apr 3, 10:10  │
@@ -401,15 +401,15 @@ Edit `appsettings.json` (next to the exe):
 ---
 
 ## 📊 Performance
-
-| Metric | Value |
-|--------|-------|
-| URL Analysis | < 20ms |
-| Memory Usage | ~80MB |
-| EXE Size | ~72MB |
+┌────────────────────────────┐
+| Metric       | Value       |
+|--------------|-------------|
+| URL Analysis | < 20ms      |
+| Memory Usage | ~80MB       |
+| EXE Size     | ~72MB       |
 | Startup Time | < 2 seconds |
-| ML Inference | < 5ms |
-
+| ML Inference | < 5ms       |
+└────────────────────────────┘
 ---
 
 ## 🚨 Troubleshooting
