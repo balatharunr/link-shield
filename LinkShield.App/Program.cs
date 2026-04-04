@@ -121,7 +121,13 @@ static class Program
             
             var threatDb = new ThreatDatabaseService(
                 loggerFactory.CreateLogger<ThreatDatabaseService>());
+            
+            // Ensure database exists and load cache
             threatDb.EnsureDatabaseAsync().GetAwaiter().GetResult();
+            
+            // Log cache status for debugging
+            var domainCount = threatDb.GetDomainCountAsync().GetAwaiter().GetResult();
+            logger.LogInformation("Threat database loaded with {Count} domains", domainCount);
 
             var config = new ConfigurationBuilder()
                 .SetBasePath(AppContext.BaseDirectory)
@@ -264,6 +270,8 @@ static class Program
 
     private static void ShowBlockedNotification(string url, string reason = "Threat Blocked")
     {
+        // Fire-and-forget notification that replaces any existing notification instantly
+        // Uses ToastNotification with Tag to replace previous notifications
         var safeUrl = url.Replace("'", "''").Replace("\"", "`\"");
         if (safeUrl.Length > 150) safeUrl = safeUrl[..150] + "...";
 
@@ -275,7 +283,11 @@ $textNodes = $template.GetElementsByTagName('text')
 $textNodes.Item(0).AppendChild($template.CreateTextNode('🛡️ LinkShield: {reason}')) > $null
 $textNodes.Item(1).AppendChild($template.CreateTextNode('Blocked: {safeUrl}')) > $null
 $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+$toast.Tag = 'LinkShieldAlert'
+$toast.Group = 'LinkShield'
 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
+# Remove any existing notification with same tag before showing new one
+try {{ [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('LinkShieldAlert', 'LinkShield', 'LinkShield') }} catch {{ }}
 $notifier.Show($toast)
 ";
 
@@ -288,6 +300,7 @@ $notifier.Show($toast)
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
+            // Fire-and-forget - don't wait for PowerShell to complete
             Process.Start(psi);
         }
         catch { }
@@ -295,6 +308,7 @@ $notifier.Show($toast)
     
     private static void ShowDeadLinkNotification(string domain)
     {
+        // Fire-and-forget notification that replaces any existing notification instantly
         var safeDomain = domain.Replace("'", "''").Replace("\"", "`\"");
         if (safeDomain.Length > 100) safeDomain = safeDomain[..100] + "...";
 
@@ -306,7 +320,11 @@ $textNodes = $template.GetElementsByTagName('text')
 $textNodes.Item(0).AppendChild($template.CreateTextNode('⚠️ LinkShield: Dead Link Detected')) > $null
 $textNodes.Item(1).AppendChild($template.CreateTextNode('Server for {safeDomain} does not exist')) > $null
 $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+$toast.Tag = 'LinkShieldAlert'
+$toast.Group = 'LinkShield'
 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
+# Remove any existing notification with same tag before showing new one
+try {{ [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('LinkShieldAlert', 'LinkShield', 'LinkShield') }} catch {{ }}
 $notifier.Show($toast)
 ";
 
@@ -319,6 +337,7 @@ $notifier.Show($toast)
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
+            // Fire-and-forget - don't wait for PowerShell to complete
             Process.Start(psi);
         }
         catch { }

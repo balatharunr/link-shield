@@ -148,12 +148,17 @@ public class ThreatFeedSyncWorker : BackgroundService
 
     /// <summary>
     /// Extracts unique domains from a list of URLs.
+    /// Normalizes domains by removing 'www.' prefix and converting to lowercase.
     /// </summary>
     private static List<string> ExtractDomainsFromUrls(IEnumerable<string> urls)
     {
         return urls
             .Where(url => Uri.TryCreate(url, UriKind.Absolute, out _))
-            .Select(url => new Uri(url).Host.ToLowerInvariant())
+            .Select(url => {
+                var host = new Uri(url).Host.ToLowerInvariant();
+                // Remove www. prefix for consistent matching
+                return host.StartsWith("www.") ? host[4..] : host;
+            })
             .Where(host => !string.IsNullOrEmpty(host))
             .Distinct()
             .ToList();

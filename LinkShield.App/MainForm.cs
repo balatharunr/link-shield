@@ -18,6 +18,7 @@ public partial class MainForm : Form
     private Panel _statsPanel = null!;
     private Panel _historyPanel = null!;
     private ListView _historyList = null!;
+    private Label _statusLabel = null!;
     private Label _todayStatsLabel = null!;
     private Label _weekStatsLabel = null!;
     private Label _totalStatsLabel = null!;
@@ -93,7 +94,7 @@ public partial class MainForm : Form
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.FromArgb(0, 200, 83),
             AutoSize = true,
-            Location = new Point(20, 44)  // Below the title
+            Location = new Point(20, 45)  // Below the title to avoid overlap
         };
 
         _settingsBtn = new Button
@@ -113,7 +114,7 @@ public partial class MainForm : Form
         _headerPanel.Controls.AddRange(new Control[] { titleLabel, _protectionStatusLabel, _settingsBtn });
         _headerPanel.Resize += (s, e) =>
         {
-            _settingsBtn.Location = new Point(_headerPanel.Width - 60, 20);
+            _settingsBtn.Location = new Point(_headerPanel.Width - 60, 15);
         };
 
         // Stats Panel
@@ -313,7 +314,18 @@ public partial class MainForm : Form
 
     private void HistoryList_DrawColumnHeader(object? sender, DrawListViewColumnHeaderEventArgs e)
     {
-        e.Graphics.FillRectangle(new SolidBrush(Color.FromArgb(40, 40, 40)), e.Bounds);
+        // Fill entire header row with dark grey to eliminate white column issue
+        using var brush = new SolidBrush(Color.FromArgb(40, 40, 40));
+        
+        // For the last column, extend the fill to cover any remaining space
+        var fillBounds = e.Bounds;
+        if (e.ColumnIndex == _historyList.Columns.Count - 1)
+        {
+            fillBounds = new Rectangle(e.Bounds.X, e.Bounds.Y, 
+                _historyList.ClientSize.Width - e.Bounds.X, e.Bounds.Height);
+        }
+        
+        e.Graphics.FillRectangle(brush, fillBounds);
         e.Graphics.DrawString(e.Header?.Text, _historyList.Font, Brushes.White, e.Bounds.X + 5, e.Bounds.Y + 5);
     }
 

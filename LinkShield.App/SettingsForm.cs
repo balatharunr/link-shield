@@ -13,9 +13,11 @@ public partial class SettingsForm : Form
     private CheckBox _notificationsCheckBox = null!;
     private Button _setDefaultBrowserBtn = null!;
     private Button _restoreDefaultBrowserBtn = null!;
+    private Button _unregisterBtn = null!;
     private Label _currentBrowserLabel = null!;
     private ComboBox _redirectBrowserCombo = null!;
     private Label _redirectBrowserLabel = null!;
+    private Label _registrationStatusLabel = null!;
 
     // List of detected browsers
     private List<BrowserInfo> _installedBrowsers = new();
@@ -83,7 +85,7 @@ public partial class SettingsForm : Form
     private void InitializeComponent()
     {
         Text = "Settings";
-        Size = new Size(450, 500);
+        Size = new Size(450, 550);
         StartPosition = FormStartPosition.CenterParent;
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = false;
@@ -107,7 +109,7 @@ public partial class SettingsForm : Form
             Font = new Font("Segoe UI", 10),
             ForeColor = Color.White,
             Location = new Point(20, 60),
-            Size = new Size(390, 180)
+            Size = new Size(390, 230)
         };
 
         _currentBrowserLabel = new Label
@@ -119,12 +121,21 @@ public partial class SettingsForm : Form
             AutoSize = true
         };
 
+        _registrationStatusLabel = new Label
+        {
+            Text = "Registration: Checking...",
+            Font = new Font("Segoe UI", 8),
+            ForeColor = Color.Gray,
+            Location = new Point(15, 48),
+            AutoSize = true
+        };
+
         _setDefaultBrowserBtn = new Button
         {
             Text = "Set LinkShield as Default Browser",
             Font = new Font("Segoe UI", 9),
             Size = new Size(220, 35),
-            Location = new Point(15, 55),
+            Location = new Point(15, 75),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(0, 120, 215),
             ForeColor = Color.White,
@@ -135,10 +146,10 @@ public partial class SettingsForm : Form
 
         _restoreDefaultBrowserBtn = new Button
         {
-            Text = "Restore Original Browser",
+            Text = "Restore Browser",
             Font = new Font("Segoe UI", 9),
-            Size = new Size(140, 35),
-            Location = new Point(245, 55),
+            Size = new Size(100, 35),
+            Location = new Point(245, 75),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(60, 60, 60),
             ForeColor = Color.White,
@@ -147,20 +158,34 @@ public partial class SettingsForm : Form
         _restoreDefaultBrowserBtn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
         _restoreDefaultBrowserBtn.Click += OnRestoreDefaultBrowserClick;
 
+        _unregisterBtn = new Button
+        {
+            Text = "🗑️ Unregister",
+            Font = new Font("Segoe UI", 9),
+            Size = new Size(100, 35),
+            Location = new Point(15, 115),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(180, 50, 50),
+            ForeColor = Color.White,
+            Cursor = Cursors.Hand
+        };
+        _unregisterBtn.FlatAppearance.BorderSize = 0;
+        _unregisterBtn.Click += OnUnregisterClick;
+
         // Redirect browser selection
         _redirectBrowserLabel = new Label
         {
             Text = "Redirect safe URLs to:",
             Font = new Font("Segoe UI", 9),
             ForeColor = Color.White,
-            Location = new Point(15, 105),
+            Location = new Point(15, 160),
             AutoSize = true
         };
 
         _redirectBrowserCombo = new ComboBox
         {
             Font = new Font("Segoe UI", 9),
-            Location = new Point(15, 128),
+            Location = new Point(15, 183),
             Size = new Size(360, 28),
             DropDownStyle = ComboBoxStyle.DropDownList,
             BackColor = Color.FromArgb(45, 45, 45),
@@ -178,9 +203,11 @@ public partial class SettingsForm : Form
         _redirectBrowserCombo.SelectedIndexChanged += OnRedirectBrowserChanged;
 
         browserGroup.Controls.AddRange(new Control[] { 
-            _currentBrowserLabel, 
+            _currentBrowserLabel,
+            _registrationStatusLabel,
             _setDefaultBrowserBtn, 
             _restoreDefaultBrowserBtn,
+            _unregisterBtn,
             _redirectBrowserLabel,
             _redirectBrowserCombo
         });
@@ -191,7 +218,7 @@ public partial class SettingsForm : Form
             Text = "General",
             Font = new Font("Segoe UI", 10),
             ForeColor = Color.White,
-            Location = new Point(20, 255),
+            Location = new Point(20, 305),
             Size = new Size(390, 90)
         };
 
@@ -224,7 +251,7 @@ public partial class SettingsForm : Form
             Text = "💡 LinkShield intercepts URLs clicked from apps and checks\n     them before opening in your selected browser.",
             Font = new Font("Segoe UI", 8),
             ForeColor = Color.Gray,
-            Location = new Point(20, 355),
+            Location = new Point(20, 405),
             AutoSize = true
         };
 
@@ -234,7 +261,7 @@ public partial class SettingsForm : Form
             Text = "Close",
             Font = new Font("Segoe UI", 10),
             Size = new Size(100, 35),
-            Location = new Point(310, 410),
+            Location = new Point(310, 460),
             FlatStyle = FlatStyle.Flat,
             BackColor = Color.FromArgb(50, 50, 50),
             ForeColor = Color.White,
@@ -242,6 +269,7 @@ public partial class SettingsForm : Form
             DialogResult = DialogResult.OK
         };
         closeBtn.FlatAppearance.BorderColor = Color.FromArgb(80, 80, 80);
+        closeBtn.Click += (s, e) => Close();  // Explicitly close the form
 
         Controls.AddRange(new Control[] { titleLabel, browserGroup, generalGroup, infoLabel, closeBtn });
     }
@@ -260,6 +288,9 @@ public partial class SettingsForm : Form
             _currentBrowserLabel.Text = "No previous browser detected";
         }
 
+        // Load registration status
+        UpdateRegistrationStatus();
+
         // Load redirect browser selection
         var savedRedirectBrowser = _registryManager.GetRedirectBrowserPath();
         if (!string.IsNullOrEmpty(savedRedirectBrowser))
@@ -276,6 +307,22 @@ public partial class SettingsForm : Form
         }
     }
 
+    private void UpdateRegistrationStatus()
+    {
+        if (_registryManager.IsBrowserRegistered())
+        {
+            _registrationStatusLabel.Text = "Registration: ✅ Registered as browser capability";
+            _registrationStatusLabel.ForeColor = Color.FromArgb(100, 200, 100);
+            _unregisterBtn.Enabled = true;
+        }
+        else
+        {
+            _registrationStatusLabel.Text = "Registration: ❌ Not registered";
+            _registrationStatusLabel.ForeColor = Color.Gray;
+            _unregisterBtn.Enabled = false;
+        }
+    }
+
     private void OnSetDefaultBrowserClick(object? sender, EventArgs e)
     {
         try
@@ -284,6 +331,7 @@ public partial class SettingsForm : Form
             if (!string.IsNullOrEmpty(exePath))
             {
                 _registryManager.RegisterAsBrowser(exePath);
+                UpdateRegistrationStatus();
                 
                 // Open Windows Default Apps settings directly to browser selection
                 OpenDefaultBrowserSettings();
@@ -343,6 +391,44 @@ public partial class SettingsForm : Form
         if (result == DialogResult.Yes)
         {
             OpenDefaultBrowserSettings();
+        }
+    }
+
+    private void OnUnregisterClick(object? sender, EventArgs e)
+    {
+        var result = MessageBox.Show(
+            "This will remove LinkShield's browser registration from Windows.\n\n" +
+            "⚠️ This will:\n" +
+            "• Remove LinkShield from the browser list in Windows Settings\n" +
+            "• Remove all URL handler registrations\n" +
+            "• Remove auto-start entry (if enabled)\n\n" +
+            "You will need to re-register if you want to use LinkShield again.\n\n" +
+            "Continue?",
+            "Unregister LinkShield",
+            MessageBoxButtons.YesNo,
+            MessageBoxIcon.Warning);
+        
+        if (result == DialogResult.Yes)
+        {
+            try
+            {
+                _registryManager.CompleteUninstall();
+                _autoStartCheckBox.Checked = false;
+                UpdateRegistrationStatus();
+                
+                MessageBox.Show(
+                    "LinkShield has been unregistered successfully.\n\n" +
+                    "All registry entries have been removed.\n" +
+                    "You may need to restart your system for all changes to take effect.",
+                    "Unregistration Complete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Failed to unregister: {ex.Message}", "Error",
+                    MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 
