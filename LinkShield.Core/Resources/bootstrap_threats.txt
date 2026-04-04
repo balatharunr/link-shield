@@ -1,0 +1,104 @@
+# LinkShield Bootstrap Threat Database
+# This file contains known phishing/malicious domains that are loaded on first startup
+# to provide immediate protection before threat feeds are synced.
+# Updated periodically by developers and embedded in the application.
+#
+# Format: One domain per line (without http:// or www. prefix)
+# Lines starting with # are comments
+
+# Common phishing domains (examples - these would be replaced with real threats)
+# From various threat intelligence sources
+
+# Generic phishing patterns
+secure-login-verify.com
+account-verify-secure.com
+login-secure-update.com
+verify-account-now.com
+secure-signin-portal.com
+update-your-account.com
+confirm-identity-now.com
+security-alert-center.com
+account-suspended-verify.com
+urgent-security-update.com
+
+# Banking phishing
+paypal-secure-login.tk
+chase-verify-account.ml
+bankofamerica-secure.ga
+wellsfargo-login-verify.cf
+citibank-account-update.gq
+capitalone-secure-signin.xyz
+
+# Tech company impersonation
+microsoft-account-verify.tk
+apple-id-secure-login.ml
+google-account-suspended.ga
+amazon-order-confirm.cf
+netflix-payment-update.gq
+facebook-security-check.xyz
+instagram-verify-account.top
+twitter-suspended-appeal.work
+
+# Crypto/Financial scams
+coinbase-verify-wallet.tk
+binance-security-update.ml
+crypto-wallet-verify.ga
+bitcoin-claim-reward.cf
+ethereum-airdrop-claim.gq
+
+# Shipping/Delivery phishing
+fedex-delivery-update.tk
+ups-package-tracking.ml
+usps-redelivery-schedule.ga
+dhl-shipment-confirm.cf
+
+# E-commerce phishing
+amazon-order-problem.xyz
+ebay-account-suspended.top
+walmart-order-verify.work
+bestbuy-reward-claim.click
+
+# Social engineering / Prize scams
+free-iphone-winner.tk
+amazon-gift-card-reward.ml
+walmart-survey-prize.ga
+costco-anniversary-gift.cf
+target-reward-claim.gq
+
+# Generic suspicious TLD domains frequently used in phishing
+login-verify.tk
+secure-update.ml
+account-confirm.ga
+password-reset.cf
+identity-verify.gq
+security-center.xyz
+account-recovery.top
+signin-portal.work
+verification-required.click
+urgent-action.link
+
+# Known malware distribution domains
+malware-download.com
+virus-installer.net
+trojan-payload.org
+ransomware-dropper.com
+spyware-bundle.net
+
+# Credential harvesting
+credentials-harvest.com
+password-stealer.net
+login-capture.org
+keylogger-install.com
+
+# Tech support scams
+microsoft-support-alert.com
+apple-virus-warning.net
+windows-security-alert.org
+computer-infected-call.com
+
+# Additional high-risk domains from threat intelligence
+0-day-exploit.com
+phishing-kit-host.net
+scam-page-builder.org
+fake-login-generator.com
+credential-theft-service.net

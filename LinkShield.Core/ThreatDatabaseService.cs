@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +19,7 @@ namespace LinkShield.Core;
 ///   - In-memory cache for ultra-fast lookups (refreshed on sync)
 ///   - Case-insensitive domain matching
 ///   - WAL mode for concurrent read/write
+///   - Bootstrap threats loaded on first startup for immediate protection
 /// </summary>
 public class ThreatDatabaseService
 {
@@ -36,6 +39,7 @@ public class ThreatDatabaseService
 
     /// <summary>
     /// Ensures the database and all tables/indexes exist.
+    /// On first startup (empty database), loads embedded bootstrap threats for immediate protection.
     /// Called once on application startup.
     /// </summary>
     public async Task EnsureDatabaseAsync()
@@ -51,6 +55,18 @@ public class ThreatDatabaseService
             await context.Database.ExecuteSqlRawAsync("PRAGMA journal_mode=WAL;");
             _logger.LogInformation("Threat database initialized at {Path} (WAL mode)", _dbPath);
             
+            // Check if this is a fresh database (no domains yet)
+            var domainCount = await context.MaliciousDomains.CountAsync();
+            if (domainCount == 0)
+            {
+                _logger.LogInformation("Fresh database detected - loading bootstrap threats for immediate protection...");
+                await LoadBootstrapThreatsAsync();
+            }
+            else
+            {
+                _logger.LogInformation("Database contains {Count} domains from previous session", domainCount);
+            }
+            
             // Initialize in-memory cache from database
             await RefreshCacheAsync();
         }
@@ -58,6 +74,46 @@ public class ThreatDatabaseService
         {
             _logger.LogError(ex, "Failed to initialize threat database.");
             throw;
+        }
+    }
+    
+    /// <summary>
+    /// Loads the embedded bootstrap threats file into the database.
+    /// This provides immediate protection for new users before threat feeds sync.
+    /// </summary>
+    private async Task LoadBootstrapThreatsAsync()
+    {
+        try
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            var resourceName = "LinkShield.Core.Resources.bootstrap_threats.txt";
+            
+            using var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream == null)
+            {
+                _logger.LogWarning("Bootstrap threats resource not found: {Resource}", resourceName);
+                return;
+            }
+            
+            using var reader = new StreamReader(stream);
+            var content = await reader.ReadToEndAsync();
+            
+            // Parse the file - skip comments and empty lines
+            var domains = content
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries)
+                .Select(line => line.Trim())
+                .Where(line => !string.IsNullOrEmpty(line) && !line.StartsWith('#'))
+                .ToList();
+            
+            if (domains.Count > 0)
+            {
+                var inserted = await BulkUpsertAsync(domains);
+                _logger.LogInformation("Loaded {Total} bootstrap threat domains ({Inserted} new)", domains.Count, inserted);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to load bootstrap threats");
         }
     }
 

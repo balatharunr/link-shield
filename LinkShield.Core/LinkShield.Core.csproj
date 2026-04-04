@@ -19,6 +19,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Resources\linkshield_model.onnx" />
+    <EmbeddedResource Include="Resources\bootstrap_threats.txt" />
   </ItemGroup>
 
 </Project>
