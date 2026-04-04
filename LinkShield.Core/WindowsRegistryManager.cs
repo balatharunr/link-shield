@@ -146,6 +146,62 @@ public class WindowsRegistryManager
     }
 
     /// <summary>
+    /// Completely removes ALL LinkShield registry entries including backup config.
+    /// Call this to fully clean up the system when uninstalling.
+    /// </summary>
+    public void CompleteUninstall()
+    {
+        try
+        {
+            _logger.LogInformation("Performing complete LinkShield uninstallation cleanup...");
+
+            // 1. Remove browser registration
+            UnregisterAsBrowser();
+
+            // 2. Remove backup config
+            Registry.CurrentUser.DeleteSubKeyTree(BackupRegistryPath, throwOnMissingSubKey: false);
+            
+            // Also try removing parent key if empty
+            try
+            {
+                Registry.CurrentUser.DeleteSubKeyTree(@"Software\LinkShield", throwOnMissingSubKey: false);
+            }
+            catch { /* Parent may have other subkeys */ }
+
+            // 3. Remove auto-start entry
+            try
+            {
+                using var runKey = Registry.CurrentUser.OpenSubKey(
+                    @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", writable: true);
+                runKey?.DeleteValue(AppName, throwOnMissingValue: false);
+            }
+            catch { /* May not exist */ }
+
+            _logger.LogInformation("Complete uninstall cleanup finished.");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error during complete uninstall cleanup.");
+        }
+    }
+
+    /// <summary>
+    /// Checks if LinkShield browser registration exists in the registry.
+    /// </summary>
+    public bool IsBrowserRegistered()
+    {
+        try
+        {
+            using var key = Registry.CurrentUser.OpenSubKey(ClassesPath);
+            return key != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
     /// Detects the user's current default browser and saves it so LinkShield
     /// can forward safe URLs to it without causing an infinite loop.
     /// </summary>

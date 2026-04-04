@@ -103,8 +103,9 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
             }
 
             var domain = uri.Host.ToLowerInvariant();
+            var domainWithoutWww = domain.StartsWith("www.") ? domain[4..] : domain;
             _logger.LogDebug("═══ Analyzing URL: {Url} ═══", url.Length > 60 ? url[..60] + "..." : url);
-            _logger.LogDebug("Domain: {Domain}", domain);
+            _logger.LogDebug("Domain: {Domain} (normalized: {Normalized})", domain, domainWithoutWww);
 
             // ═══════════════════════════════════════════════════════════════
             // CHECK 1: DNS Resolution - Does the domain even exist?
@@ -144,10 +145,11 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
 
             // ═══════════════════════════════════════════════════════════════
             // CHECK 3: Blocklist - Is this a known malicious domain?
+            // Check both with and without www prefix
             // ═══════════════════════════════════════════════════════════════
             
             // Check bootstrap blocklist (in-memory, instant)
-            if (_bootstrapBlocklist.Contains(domain))
+            if (_bootstrapBlocklist.Contains(domain) || _bootstrapBlocklist.Contains(domainWithoutWww))
             {
                 result.IsMalicious = true;
                 result.ThreatType = "Blocklist";
@@ -157,15 +159,28 @@ public class SqliteUrlAnalyzer : IUrlAnalyzer
                 return result;
             }
 
-            // Check SQLite database
-            var isInDatabase = await _threatDb.DomainExistsAsync(domain);
-            if (isInDatabase)
+            // Check SQLite database (uses in-memory cache for ultra-fast lookup)
+            // Check both domain and domainWithoutWww for comprehensive matching
+            if (_threatDb.DomainExistsInCache(domain) || _threatDb.DomainExistsInCache(domainWithoutWww))
             {
                 result.IsMalicious = true;
                 result.ThreatType = "Blocklist";
                 result.ThreatDetails = "Domain found in threat database";
                 result.CheckStage = "Database";
                 _logger.LogWarning("[CHECK 3 - BLOCKLIST] Domain '{Domain}' in threat database. BLOCKED.", domain);
+                return result;
+            }
+            
+            // Fallback to async check if cache miss (shouldn't happen often)
+            var isInDatabase = await _threatDb.DomainExistsAsync(domain) || 
+                               await _threatDb.DomainExistsAsync(domainWithoutWww);
+            if (isInDatabase)
+            {
+                result.IsMalicious = true;
+                result.ThreatType = "Blocklist";
+                result.ThreatDetails = "Domain found in threat database";
+                result.CheckStage = "Database";
+                _logger.LogWarning("[CHECK 3 - BLOCKLIST] Domain '{Domain}' in threat database (async). BLOCKED.", domain);
                 return result;
             }
             

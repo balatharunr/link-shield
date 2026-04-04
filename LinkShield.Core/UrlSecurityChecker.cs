@@ -25,7 +25,7 @@ public class UrlSecurityResult
 /// <summary>
 /// URL security checker for detecting phishing/malicious URLs.
 /// 
-/// This class handles SECURITY checks only (brand impersonation, risky TLDs).
+/// This class handles SECURITY checks only (brand impersonation, risky TLDs, suspicious URL patterns).
 /// Dead link detection (NXDOMAIN) is handled separately by NetworkStateChecker
 /// in the interceptor flow AFTER security checks pass.
 /// </summary>
@@ -60,13 +60,42 @@ public partial class UrlSecurityChecker
         "steam", "epicgames", "playstation", "xbox", "nintendo", "roblox", "twitch"
     };
     
-    // Suspicious keywords often used in phishing
-    private static readonly HashSet<string> SuspiciousKeywords = new(StringComparer.OrdinalIgnoreCase)
+    // Suspicious keywords often used in phishing - checked in URL PATH/QUERY
+    private static readonly HashSet<string> SuspiciousPathKeywords = new(StringComparer.OrdinalIgnoreCase)
     {
-        "login", "signin", "sign-in", "verify", "verification", "secure", "security",
-        "account", "update", "confirm", "authenticate", "password", "credential",
-        "suspend", "suspended", "locked", "unlock", "alert", "warning", "urgent",
-        "expire", "expired", "billing", "payment", "invoice", "refund", "prize", "winner"
+        "login", "signin", "sign-in", "sign_in", "logon",
+        "verify", "verification", "validate", "confirm", "authenticate",
+        "secure", "security", "security-check", "security-alert",
+        "account", "my-account", "myaccount", "account-update",
+        "password", "reset-password", "change-password", "forgot-password",
+        "credential", "credentials",
+        "suspend", "suspended", "locked", "unlock", "reactivate",
+        "alert", "warning", "urgent", "action-required",
+        "expire", "expired", "expiring",
+        "billing", "payment", "invoice", "update-billing", "update-payment",
+        "banking", "bank", "update-banking-info",
+        "refund", "claim-refund",
+        "prize", "winner", "congratulations", "reward",
+        "free-gift", "gift-card", "free-gift-card", "claim",
+        "bonus", "offer", "special-offer",
+        "wallet", "crypto", "bitcoin",
+        "redirect", "callback", "oauth", "auth"
+    };
+    
+    // Suspicious parameter names commonly used in phishing
+    private static readonly HashSet<string> SuspiciousParamNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "verify", "token", "session", "auth", "code",
+        "account", "user", "email", "password", "pwd",
+        "action", "cmd", "redirect", "return", "next", "url",
+        "confirm", "validate", "secure"
+    };
+    
+    // Known URL shorteners/redirectors that are commonly abused
+    private static readonly HashSet<string> RedirectorKeywords = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "bitly", "tinyurl", "shorturl", "redirect", "goto", "click", "link", "url",
+        "track", "out", "go", "r", "l", "u"
     };
     
     // High-risk TLDs commonly used in phishing
@@ -94,6 +123,7 @@ public partial class UrlSecurityChecker
     ///   1. Skip if domain is in trusted whitelist (handled by TrustedDomainsService)
     ///   2. Raw IP address in URL (common phishing tactic)
     ///   3. Brand impersonation (fake brand + suspicious patterns)
+    ///   4. Suspicious URL patterns (phishing-like paths and parameters)
     /// 
     /// NOTE: DNS check is done BEFORE this in SqliteUrlAnalyzer.
     /// </summary>
@@ -140,8 +170,21 @@ public partial class UrlSecurityChecker
                     _logger.LogWarning("[IP] URL uses raw public IP address: {Domain}. BLOCKED.", domain);
                     return Task.FromResult(result);
                 }
+                
+                // Check for suspicious patterns even on local IPs (potential local phishing test or attack)
+                var localSuspiciousCheck = CheckSuspiciousUrlPatterns(uri);
+                if (localSuspiciousCheck.isSuspicious)
+                {
+                    result.IsMalicious = true;
+                    result.ThreatType = "SuspiciousLocalUrl";
+                    result.ThreatDetails = $"Local IP with suspicious pattern: {localSuspiciousCheck.reason}";
+                    result.RiskLevel = "High";
+                    _logger.LogWarning("[LOCAL-SUSPICIOUS] Local IP with suspicious URL pattern: {Reason}. BLOCKED.", localSuspiciousCheck.reason);
+                    return Task.FromResult(result);
+                }
 
                 _logger.LogDebug("[LOCAL] Allowing local/private IP URL: {Domain}", domain);
+                return Task.FromResult(result);
             }
             
             // ═══════════════════════════════════════════════════════════════
@@ -162,6 +205,21 @@ public partial class UrlSecurityChecker
                 return Task.FromResult(result);
             }
             
+            // ═══════════════════════════════════════════════════════════════
+            // Check 3: Suspicious URL Patterns (phishing-like paths/parameters)
+            // ═══════════════════════════════════════════════════════════════
+            var patternResult = CheckSuspiciousUrlPatterns(uri);
+            if (patternResult.isSuspicious)
+            {
+                result.IsMalicious = true;
+                result.ThreatType = "SuspiciousPattern";
+                result.ThreatDetails = patternResult.reason;
+                result.RiskLevel = "High";
+                _logger.LogWarning("[PATTERN] Suspicious URL pattern in '{Url}': {Reason}. BLOCKED.",
+                    url, patternResult.reason);
+                return Task.FromResult(result);
+            }
+            
             // No security issues detected
             _logger.LogDebug("[SAFE] Domain '{Domain}' passed security checks.", domain);
             return Task.FromResult(result);
@@ -171,6 +229,90 @@ public partial class UrlSecurityChecker
             _logger.LogError(ex, "Error in URL security analysis for '{Url}'. Failing open.", url);
             return Task.FromResult(result); // Fail-open - don't block on errors
         }
+    }
+    
+    /// <summary>
+    /// Checks for suspicious URL patterns commonly used in phishing attacks.
+    /// </summary>
+    private (bool isSuspicious, string reason) CheckSuspiciousUrlPatterns(Uri uri)
+    {
+        var path = uri.AbsolutePath.ToLowerInvariant();
+        var query = uri.Query.ToLowerInvariant();
+        var pathSegments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        
+        // Count suspicious keywords found in path
+        var suspiciousPathMatches = new List<string>();
+        foreach (var keyword in SuspiciousPathKeywords)
+        {
+            // Check full path contains keyword (handles hyphenated words)
+            if (path.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                suspiciousPathMatches.Add(keyword);
+            }
+            // Also check each path segment
+            foreach (var segment in pathSegments)
+            {
+                if (segment.Equals(keyword, StringComparison.OrdinalIgnoreCase) ||
+                    segment.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (!suspiciousPathMatches.Contains(keyword))
+                        suspiciousPathMatches.Add(keyword);
+                }
+            }
+        }
+        
+        // Check for redirector patterns in path
+        var hasRedirectorPattern = pathSegments.Any(s => 
+            RedirectorKeywords.Contains(s) || 
+            s.Contains("redirect", StringComparison.OrdinalIgnoreCase));
+        
+        // Check query parameters for suspicious names
+        var suspiciousParamMatches = new List<string>();
+        if (!string.IsNullOrEmpty(query) && query.Length > 1)
+        {
+            // Manual query string parsing (avoid System.Web dependency)
+            var queryParts = query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in queryParts)
+            {
+                var eqIndex = part.IndexOf('=');
+                var paramName = eqIndex > 0 ? part[..eqIndex] : part;
+                if (SuspiciousParamNames.Contains(paramName))
+                {
+                    suspiciousParamMatches.Add(paramName);
+                }
+            }
+        }
+        
+        // Decision logic:
+        // 1. Multiple suspicious keywords in path = definitely suspicious
+        if (suspiciousPathMatches.Count >= 2)
+        {
+            return (true, $"Multiple phishing keywords in path: {string.Join(", ", suspiciousPathMatches)}");
+        }
+        
+        // 2. Suspicious path keyword + suspicious query param = suspicious
+        if (suspiciousPathMatches.Count >= 1 && suspiciousParamMatches.Count >= 1)
+        {
+            return (true, $"Phishing pattern: path contains '{suspiciousPathMatches[0]}' with suspicious parameter '{suspiciousParamMatches[0]}'");
+        }
+        
+        // 3. High-confidence single keywords that are almost always phishing
+        var highConfidenceKeywords = new[] { "update-banking-info", "free-gift-card", "security-check", "reset-password", "verify-account" };
+        foreach (var hck in highConfidenceKeywords)
+        {
+            if (path.Contains(hck, StringComparison.OrdinalIgnoreCase))
+            {
+                return (true, $"High-confidence phishing keyword in path: {hck}");
+            }
+        }
+        
+        // 4. Redirector pattern with suspicious content
+        if (hasRedirectorPattern && (suspiciousPathMatches.Count > 0 || suspiciousParamMatches.Count > 0))
+        {
+            return (true, $"Redirector URL with suspicious content");
+        }
+        
+        return (false, "");
     }
     
     /// <summary>
@@ -204,7 +346,7 @@ public partial class UrlSecurityChecker
         if (detectedBrands.Count == 1)
         {
             // Only check domain for suspicious keywords (not the full URL path)
-            var hasSuspiciousKeyword = SuspiciousKeywords.Any(k => 
+            var hasSuspiciousKeyword = SuspiciousPathKeywords.Any(k => 
                 domain.Contains(k, StringComparison.OrdinalIgnoreCase));
             
             if (hasSuspiciousKeyword)

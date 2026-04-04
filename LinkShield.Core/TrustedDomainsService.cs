@@ -9,13 +9,19 @@ namespace LinkShield.Core;
 /// These are legitimate services that use short URLs or random-looking paths
 /// but are known to be safe (e.g., Google Forms, Amazon short links, etc.)
 /// 
-/// URLs from these domains SKIP ML analysis to avoid false positives.
+/// IMPORTANT: Hosting platforms (vercel.app, github.io, etc.) are NOT trusted
+/// because anyone can host phishing sites on them. Only first-party domains
+/// from major companies are trusted.
 /// </summary>
 public static class TrustedDomainsService
 {
     /// <summary>
     /// Trusted short URL services and their official domains.
     /// These services intentionally use random-looking URLs.
+    /// 
+    /// NOTE: Does NOT include hosting platforms where users can deploy arbitrary content:
+    ///   - vercel.app, netlify.app, github.io, herokuapp.com, pages.dev, etc.
+    /// These are frequently abused by phishers and must go through blocklist checks.
     /// </summary>
     private static readonly HashSet<string> TrustedShortUrlDomains = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -83,9 +89,8 @@ public static class TrustedDomainsService
         "linkedin.com",
         "lnkd.in",
         
-        // GitHub
+        // GitHub (main site only, NOT github.io which is user content)
         "github.com",
-        "github.io",
         "githubusercontent.com",
         "git.io",
         
@@ -100,7 +105,7 @@ public static class TrustedDomainsService
         "bl.ink",
         "cutt.ly",
         
-        // Other major services
+        // Other major services (first-party only)
         "dropbox.com",
         "db.tt",
         "slack.com",
@@ -155,24 +160,27 @@ public static class TrustedDomainsService
         "edx.org",
         "khanacademy.org",
         
-        // Developer tools
+        // Developer tools (first-party only, NOT hosting platforms)
         "stackoverflow.com",
         "npmjs.com",
         "pypi.org",
         "nuget.org",
         "hub.docker.com",
-        "vercel.app",
-        "netlify.app",
-        "herokuapp.com",
-        "azurewebsites.net",
         "cloudflare.com",
-        "pages.dev",
         
         // Communication
         "telegram.org",
         "t.me",
         "signal.org",
         "skype.com"
+        
+        // REMOVED - These are hosting platforms that phishers abuse:
+        // "vercel.app",      <- Phishing site: ghilngy.vercel.app
+        // "netlify.app",     <- Anyone can deploy
+        // "herokuapp.com",   <- Anyone can deploy
+        // "github.io",       <- User Pages, anyone can deploy
+        // "pages.dev",       <- Cloudflare Pages, anyone can deploy
+        // "azurewebsites.net" <- Azure App Service, anyone can deploy
     };
     
     /// <summary>

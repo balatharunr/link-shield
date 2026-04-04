@@ -36,9 +36,9 @@ public class NetworkStateChecker
 {
     private readonly ILogger<NetworkStateChecker> _logger;
     
-    // Increased timeout for more reliable DNS resolution
-    // 2 seconds is reasonable - DNS should respond quickly for valid domains
-    private const int DnsTimeoutMs = 2000;
+    // Reduced timeout for faster response - 800ms is usually enough for cached DNS
+    // Most legitimate domains resolve in under 100ms, dead domains fail quickly too
+    private const int DnsTimeoutMs = 800;
 
     public NetworkStateChecker(ILogger<NetworkStateChecker> logger)
     {
