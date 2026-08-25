@@ -230,10 +230,60 @@ static class Program
         var registryManager = new WindowsRegistryManager(
             loggerFactory.CreateLogger<WindowsRegistryManager>());
 
-        // Use effective browser (redirect preference > previous browser > fallback)
+        // Use effective browser (redirect preference > previous browser > fallback).
+        // CRITICAL: never launch ourselves — LinkShield is the default handler, so
+        // handing the URL back to LinkShield (directly or via explorer.exe) creates an
+        // infinite launch loop that spawns processes forever.
         var browserPath = registryManager.GetEffectiveBrowserPath();
 
-        if (!string.IsNullOrEmpty(browserPath))
+        if (TryLaunchBrowser(browserPath, url, logger))
+            return;
+
+        var fallbacks = new[]
+        {
+            @"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            @"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            @"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+            @"C:\Program Files\Mozilla Firefox\firefox.exe",
+            @"C:\Program Files (x86)\Mozilla Firefox\firefox.exe",
+            @"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+        };
+
+        foreach (var fb in fallbacks)
+        {
+            if (TryLaunchBrowser(fb, url, logger))
+                return;
+        }
+
+        // Last resort: do NOT fall back to explorer.exe / the shell — that re-enters
+        // LinkShield (we are the default browser) and loops forever. Tell the user instead.
+        logger.LogError("No real browser found to open safe URL '{Url}'. Aborting to avoid launch loop.", url);
+        ShowToast("⚠️ LinkShield: No browser configured",
+                  "Open Settings and pick a browser for safe links.");
+    }
+
+    /// <summary>
+    /// Attempts to open the URL in the given browser executable.
+    /// Refuses to launch LinkShield itself (prevents the interceptor loop) and
+    /// verifies the executable exists. Returns true only if a process was started.
+    /// </summary>
+    private static bool TryLaunchBrowser(string? browserPath, string url, ILogger logger)
+    {
+        if (string.IsNullOrWhiteSpace(browserPath))
+            return false;
+
+        // Never re-launch ourselves under any name/location.
+        if (browserPath.Contains("LinkShield", StringComparison.OrdinalIgnoreCase))
+        {
+            logger.LogWarning("Refusing to forward URL to a LinkShield executable ('{Path}') — would loop.", browserPath);
+            return false;
+        }
+
+        if (!File.Exists(browserPath))
+            return false;
+
+        try
         {
             Process.Start(new ProcessStartInfo
             {
@@ -241,109 +291,67 @@ static class Program
                 Arguments = $"\"{url}\"",
                 UseShellExecute = false
             });
+            return true;
         }
-        else
+        catch (Exception ex)
         {
-            var fallbacks = new[]
-            {
-                @"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                @"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                @"C:\Program Files\Mozilla Firefox\firefox.exe",
-                @"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
-            };
-
-            foreach (var fb in fallbacks)
-            {
-                if (File.Exists(fb))
-                {
-                    Process.Start(new ProcessStartInfo
-                    {
-                        FileName = fb,
-                        Arguments = $"\"{url}\"",
-                        UseShellExecute = false
-                    });
-                    return;
-                }
-            }
-
-            Process.Start(new ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"\"{url}\"",
-                UseShellExecute = false
-            });
+            logger.LogWarning(ex, "Failed to launch browser '{Path}'", browserPath);
+            return false;
         }
     }
 
     private static void ShowBlockedNotification(string url, string reason = "Threat Blocked")
     {
-        // Fire-and-forget notification that replaces any existing notification instantly
-        // Uses ToastNotification with Tag to replace previous notifications
-        var safeUrl = url.Replace("'", "''").Replace("\"", "`\"");
-        if (safeUrl.Length > 150) safeUrl = safeUrl[..150] + "...";
-
-        var psScript = @$"
-Add-Type -AssemblyName System.Runtime.WindowsRuntime
-[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
-$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
-$textNodes = $template.GetElementsByTagName('text')
-$textNodes.Item(0).AppendChild($template.CreateTextNode('🛡️ LinkShield: {reason}')) > $null
-$textNodes.Item(1).AppendChild($template.CreateTextNode('Blocked: {safeUrl}')) > $null
-$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
-$toast.Tag = 'LinkShieldAlert'
-$toast.Group = 'LinkShield'
-$notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
-# Remove any existing notification with same tag before showing new one
-try {{ [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('LinkShieldAlert', 'LinkShield', 'LinkShield') }} catch {{ }}
-$notifier.Show($toast)
-";
-
-        try
-        {
-            var psi = new ProcessStartInfo
-            {
-                FileName = "powershell.exe",
-                Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{psScript}\"",
-                CreateNoWindow = true,
-                UseShellExecute = false
-            };
-            // Fire-and-forget - don't wait for PowerShell to complete
-            Process.Start(psi);
-        }
-        catch { }
+        var display = url.Length > 150 ? url[..150] + "..." : url;
+        ShowToast($"🛡️ LinkShield: {reason}", $"Blocked: {display}");
     }
-    
+
     private static void ShowDeadLinkNotification(string domain)
     {
-        // Fire-and-forget notification that replaces any existing notification instantly
-        var safeDomain = domain.Replace("'", "''").Replace("\"", "`\"");
-        if (safeDomain.Length > 100) safeDomain = safeDomain[..100] + "...";
+        var display = domain.Length > 100 ? domain[..100] + "..." : domain;
+        ShowToast("⚠️ LinkShield: Dead Link Detected", $"Server for {display} does not exist");
+    }
 
-        var psScript = @$"
+    /// <summary>
+    /// Shows a Windows toast notification. The two text lines are attacker-controllable
+    /// (they contain the intercepted URL), so they are passed to PowerShell as ENVIRONMENT
+    /// VARIABLES and the script itself is a fixed, base64-encoded constant. Nothing untrusted
+    /// is ever interpolated into the script text — this closes the PowerShell-injection vector
+    /// where a crafted malicious URL could execute code when it was blocked.
+    /// </summary>
+    private static void ShowToast(string line1, string line2)
+    {
+        // Fixed script — reads its text from $env:LS_LINE1 / $env:LS_LINE2 (never interpolated).
+        const string script = @"
 Add-Type -AssemblyName System.Runtime.WindowsRuntime
 [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
 $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
 $textNodes = $template.GetElementsByTagName('text')
-$textNodes.Item(0).AppendChild($template.CreateTextNode('⚠️ LinkShield: Dead Link Detected')) > $null
-$textNodes.Item(1).AppendChild($template.CreateTextNode('Server for {safeDomain} does not exist')) > $null
+$textNodes.Item(0).AppendChild($template.CreateTextNode($env:LS_LINE1)) > $null
+$textNodes.Item(1).AppendChild($template.CreateTextNode($env:LS_LINE2)) > $null
 $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
 $toast.Tag = 'LinkShieldAlert'
 $toast.Group = 'LinkShield'
 $notifier = [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('LinkShield')
-# Remove any existing notification with same tag before showing new one
-try {{ [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('LinkShieldAlert', 'LinkShield', 'LinkShield') }} catch {{ }}
+try { [Windows.UI.Notifications.ToastNotificationManager]::History.Remove('LinkShieldAlert', 'LinkShield', 'LinkShield') } catch { }
 $notifier.Show($toast)
 ";
-
         try
         {
+            // -EncodedCommand takes base64(UTF-16LE) — no command-line quoting to escape.
+            var encoded = Convert.ToBase64String(System.Text.Encoding.Unicode.GetBytes(script));
+
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -Command \"{psScript}\"",
+                Arguments = $"-NoProfile -NonInteractive -WindowStyle Hidden -EncodedCommand {encoded}",
                 CreateNoWindow = true,
                 UseShellExecute = false
             };
+            // Untrusted text travels as data, not code.
+            psi.EnvironmentVariables["LS_LINE1"] = line1;
+            psi.EnvironmentVariables["LS_LINE2"] = line2;
+
             // Fire-and-forget - don't wait for PowerShell to complete
             Process.Start(psi);
         }
