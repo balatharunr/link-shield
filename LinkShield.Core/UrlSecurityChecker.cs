@@ -57,7 +57,20 @@ public partial class UrlSecurityChecker
         "fedex", "ups", "usps", "dhl",
         
         // Gaming
-        "steam", "epicgames", "playstation", "xbox", "nintendo", "roblox", "twitch"
+        "steam", "epicgames", "playstation", "xbox", "nintendo", "roblox", "twitch",
+
+        // Indian banks (commonly impersonated in local phishing)
+        "sbi", "hdfc", "icici", "axis", "kotak", "canara", "indusind", "yesbank",
+        "pnb", "idfc", "rbl", "federalbank",
+
+        // Indian wallets / UPI / payments
+        "paytm", "phonepe", "mobikwik", "freecharge", "bharatpe", "razorpay",
+
+        // Indian government / identity services
+        "uidai", "aadhaar", "digilocker", "incometax", "epfo", "cowin",
+
+        // Indian e-commerce / consumer
+        "flipkart", "myntra", "irctc", "zomato", "swiggy", "airtel", "jiomart"
     };
     
     // Suspicious keywords often used in phishing - checked in URL PATH/QUERY
