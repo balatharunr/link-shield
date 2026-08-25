@@ -384,14 +384,20 @@ public partial class SettingsForm : Form
     private void OnRestoreDefaultBrowserClick(object? sender, EventArgs e)
     {
         var result = MessageBox.Show(
-            "This will open Windows Settings where you can select your preferred browser.\n\n" +
+            "This removes LinkShield as your link handler and hands control back to a normal browser.\n\n" +
+            "• LinkShield stops intercepting link clicks\n" +
+            "• Windows Settings opens so you can pick your browser\n\n" +
             "Do you want to continue?",
             "Restore Browser",
             MessageBoxButtons.YesNo,
             MessageBoxIcon.Question);
-        
+
         if (result == DialogResult.Yes)
         {
+            // Actually remove our URL-handler registration first, otherwise links keep
+            // re-launching LinkShield no matter what the user picks in Settings.
+            _registryManager.UnregisterAsBrowser();
+            UpdateRegistrationStatus();
             OpenDefaultBrowserSettings();
         }
     }
