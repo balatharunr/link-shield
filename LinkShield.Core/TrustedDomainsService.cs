@@ -172,8 +172,21 @@ public static class TrustedDomainsService
         "telegram.org",
         "t.me",
         "signal.org",
-        "skype.com"
-        
+        "skype.com",
+
+        // ── Indian first-party domains (prevent false positives on real bank/UPI/gov sites) ──
+        // Banks
+        "onlinesbi.sbi", "onlinesbi.com", "sbi.co.in", "sbicard.com",
+        "hdfcbank.com", "icicibank.com", "axisbank.com", "kotak.com", "kotak811.com",
+        "canarabank.com", "pnbindia.in", "idfcfirstbank.com", "rblbank.com",
+        "federalbank.co.in", "indusind.com", "yesbank.in", "bankofbaroda.in", "bankofbaroda.co.in",
+        // Wallets / UPI / payments
+        "paytm.com", "paytmbank.com", "phonepe.com", "mobikwik.com", "freecharge.in",
+        "bharatpe.com", "razorpay.com", "npci.org.in", "bhimupi.org.in",
+        // E-commerce / consumer
+        "flipkart.com", "myntra.com", "irctc.co.in", "zomato.com", "swiggy.com",
+        "airtel.in", "airtel.com", "jiomart.com", "jio.com"
+
         // REMOVED - These are hosting platforms that phishers abuse:
         // "vercel.app",      <- Phishing site: ghilngy.vercel.app
         // "netlify.app",     <- Anyone can deploy
@@ -201,6 +214,13 @@ public static class TrustedDomainsService
         { ".aws", "Amazon" },       // .aws TLD
         { ".xbox", "Microsoft" },   // .xbox TLD
         { ".windows", "Microsoft" },// .windows TLD
+
+        // Indian restricted second-level domains — registration is gated, so phishers
+        // cannot obtain these. Trusting them protects real gov/edu sites (uidai.gov.in,
+        // incometax.gov.in, *.nic.in, university .ac.in) from false positives.
+        { ".gov.in", "Government of India" },
+        { ".nic.in", "Government of India" },
+        { ".ac.in", "Indian Academic" },
     };
 
     /// <summary>
